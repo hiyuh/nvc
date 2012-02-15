@@ -752,7 +752,7 @@ const char *type_pp(type_t t)
          char *p = fn;
          const char *end = fn + sizeof(fn);
          const char *fname = istr(type_ident(t));
-         const bool operator = !isalpha(fname[0]);
+         const bool operator = !isalpha((uint8_t)fname[0]);
          const char *quote = operator ? "\"" : "";
 
          p += snprintf(p, end - p, "%s%s%s(", quote, fname, quote);
