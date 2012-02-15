@@ -83,7 +83,7 @@ static void paginate_msg(const char *fmt, va_list ap, int left, int right)
    const char *p = strp;
    int col = left;
    while (*p != '\0') {
-      if (isspace(*p) && col >= right) {
+      if (isspace((uint8_t)*p) && col >= right) {
          // Can break line here
          fputc('\n', stderr);
          for (col = 0; col < left; col++)
