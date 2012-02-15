@@ -26,6 +26,9 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
+#if defined __CYGWIN__
+#include <stdarg.h>
+#endif
 
 #include "loc.h"
 
