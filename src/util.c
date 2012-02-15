@@ -19,8 +19,10 @@
 
 #include "util.h"
 
+#if !defined __CYGWIN__
 // Get REG_EIP from ucontext.h
 #include <sys/ucontext.h>
+#endif
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -28,7 +30,9 @@
 #include <errno.h>
 #include <string.h>
 #include <stdbool.h>
+#if !defined __CYGWIN__
 #include <execinfo.h>
+#endif
 #include <signal.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -36,8 +40,10 @@
 
 #include <sys/types.h>
 #include <sys/wait.h>
+#if !defined __CYGWIN__
 #include <sys/ptrace.h>
 #include <sys/sysctl.h>
+#endif
 
 // The IP register is different depending on the CPU arch
 // Try x86-64 first then regular x86: nothing else is supported
@@ -53,6 +59,8 @@
 #endif
 #elif defined __powerpc
 #define ARCH_IP_REG __nip
+#elif defined __CYGWIN__
+#define NO_STACK_TRACE
 #else
 #warning "Don't know the IP register name for your architecture!"
 #define NO_STACK_TRACE
