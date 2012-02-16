@@ -4,13 +4,14 @@ Cygwin gcc includes src/rt/signal.h at #include <signal.h> in sys/poll.h.
 This is really odd.
 Maybe, real fix is fix cygwin gcc itself.
 One of workaround is rename src/rt/signal.h.
+
+On rename-signal-h branch, I renamed signal.h to usignal.h.
+To do so, I can get nvc.exe but it's a bit awkward to me.
+
 See more details:
 
  $ uname -a
  CYGWIN_NT-5.1 jabberwocky 1.7.10(0.259/5/3) 2012-02-05 12:36 i686 Cygwin
-
- $ ls src/rt/signal.h
- src/rt/signal.h
 
  $ ls /usr/include/signal.h
  /usr/include/signal.h
@@ -22,6 +23,12 @@ See more details:
  #include <sys/cdefs.h>
  #include <sys/types.h>
  #include <signal.h>
+
+ $ cd ~/git-repos/nvc
+ $ git checkout port-cygwin
+
+ $ ls src/rt/signal.h
+ src/rt/signal.h
 
  $ make -k
  [SNIP]
