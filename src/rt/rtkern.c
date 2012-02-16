@@ -19,7 +19,7 @@
 #include "tree.h"
 #include "lib.h"
 #include "util.h"
-#include "signal.h"
+#include "usignal.h"
 #include "slave.h"
 #include "alloc.h"
 #include "heap.h"
@@ -629,9 +629,9 @@ static void rt_update_signal(struct signal *s, int source, uint64_t value)
    int32_t new_flags = 0;
    const bool first_cycle = (iteration == 0 && now == 0);
    if (!first_cycle) {
-      new_flags = SIGNAL_F_ACTIVE;
+      new_flags = USIGNAL_F_ACTIVE;
       if (s->resolved != value) {
-         new_flags |= SIGNAL_F_EVENT;
+         new_flags |= USIGNAL_F_EVENT;
 
          struct sens_list *it, *next;
          for (it = s->sensitive; it != NULL; it = next) {
@@ -652,14 +652,14 @@ static void rt_update_signal(struct signal *s, int source, uint64_t value)
    // will cause the event callback to be executed at the end of
    // the cycle
    struct signal *base = s - s->offset;
-   base->flags |= SIGNAL_F_UPDATE;
+   base->flags |= USIGNAL_F_UPDATE;
 
    // LAST_VALUE is the same as the initial value when
    // there have been no events on the signal otherwise
    // only update it when there is an event
    if (first_cycle)
       s->last_value = value;
-   else if (new_flags & SIGNAL_F_EVENT)
+   else if (new_flags & USIGNAL_F_EVENT)
       s->last_value = s->resolved;
 
    s->resolved        = value;
@@ -738,10 +738,10 @@ static void rt_cycle(void)
    for (unsigned i = 0; i < n_active_signals; i++) {
       struct signal *s = active_signals[i];
       struct signal *base = s - s->offset;
-      s->flags &= ~(SIGNAL_F_ACTIVE | SIGNAL_F_EVENT);
-      if (base->event_cb != NULL && base->flags & SIGNAL_F_UPDATE) {
+      s->flags &= ~(USIGNAL_F_ACTIVE | USIGNAL_F_EVENT);
+      if (base->event_cb != NULL && base->flags & USIGNAL_F_UPDATE) {
          (*base->event_cb)(now, s->decl);
-         base->flags &= ~SIGNAL_F_UPDATE;
+         base->flags &= ~USIGNAL_F_UPDATE;
       }
    }
    n_active_signals = 0;
