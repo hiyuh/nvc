@@ -1,3 +1,4 @@
+--------------------------------------------
 Fix error at compiling src/slave.c on cygwin
 --------------------------------------------
 Cygwin gcc includes src/rt/signal.h at #include <signal.h> in sys/poll.h.
@@ -8,7 +9,7 @@ One of workaround is rename src/rt/signal.h.
 On rename-signal-h branch, I renamed signal.h to usignal.h.
 To do so, I can get nvc.exe but it's a bit awkward to me.
 
-See more details:
+See more detail:
 
  $ uname -a
  CYGWIN_NT-5.1 jabberwocky 1.7.10(0.259/5/3) 2012-02-05 12:36 i686 Cygwin
@@ -131,4 +132,70 @@ See more details:
   /usr/include
   /usr/lib/gcc/i686-pc-cygwin/4.5.3/../../../../include/w32api
  End of search list.
+ [SNIP]
+
+-------------------------
+Fix "make check" failures
+-------------------------
+On rename-signal-h branch, I can get nvc.exe but "make check" fails.
+
+Symptoms of "make check" faiulres look not deterministic.
+Maybe, this problem is caused by fsckin' resident anti-virus software?
+I've tried to disable my anti-virus software, but no joy.
+I use AVG Internet Security 2012 at this moment.
+
+See more detail:
+
+ $ cd ~/git-repos/nvc
+ $ git checkout rename-signal-h
+
+ $ make check
+ [SNIP]
+ make[2]: Entering directory `/home/hiyuh/git-repos/nvc/test'
+ Running suite(s): lib
+ [gc: freed 0 trees; 35 allocated]
+ 100%: Checks: 3, Failures: 0, Errors: 0
+ PASS: test_lib.exe
+ Running suite(s): ident
+ 100%: Checks: 9, Failures: 0, Errors: 0
+ PASS: test_ident.exe
+ Running suite(s): parse
+ 100%: Checks: 19, Failures: 0, Errors: 0
+ PASS: test_parse.exe
+ Running suite(s): sem
+ 100%: Checks: 16, Failures: 0, Errors: 0
+ PASS: test_sem.exe
+ Running suite(s): simplify
+ 100%: Checks: 2, Failures: 0, Errors: 0
+ PASS: test_simp.exe
+ Running suite(s): elab
+ 100%: Checks: 3, Failures: 0, Errors: 0
+ PASS: test_elab.exe
+ Running suite(s): heap
+ 100%: Checks: 3, Failures: 0, Errors: 0
+ PASS: test_heap.exe
+           wait1 : failed (timeout)
+
+         assert1 : failed
+ /home/hiyuh/git-repos/nvc/src/nvc -a /home/hiyuh/git-repos/nvc/test/regress/assert1.vhd
+
+         assign1 : failed (timeout)
+
+           wait2 : failed
+/home/hiyuh/git-repos/nvc/src/nvc -a /home/hiyuh/git-repos/nvc/test/regress/wait2.vhd
+/home/hiyuh/git-repos/nvc/src/nvc -e wait2
+
+          arith1 : ./run_regr.rb:51:in `kill': Permission denied (Errno::EACCES)
+         from ./run_regr.rb:51:in `run_cmd'
+         from ./run_regr.rb:57:in `analyse'
+         from ./run_regr.rb:112
+         from ./run_regr.rb:109:in `chdir'
+         from ./run_regr.rb:109
+         from ./run_regr.rb:106:in `each'
+         from ./run_regr.rb:106
+ FAIL: run_regr.rb
+ ==============================================
+ 1 of 8 tests failed
+ Please report to Nick Gasson <nick@nick.me.uk>
+ ==============================================
  [SNIP]
