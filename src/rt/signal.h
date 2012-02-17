@@ -15,29 +15,29 @@
 //  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-#ifndef INC_RT_USIGNAL_H
-#define INC_RT_USIGNAL_H
+#ifndef INC_RT_SIGNAL_H
+#define INC_RT_SIGNAL_H
 
-// Fixed fields in user signal structure
+// Fixed fields in signal structure
 enum {
-   USIGNAL_RESOLVED,
-   USIGNAL_LAST_VALUE,
-   USIGNAL_DECL,
-   USIGNAL_FLAGS,
-   USIGNAL_N_SOURCES,
-   USIGNAL_OFFSET,
-   USIGNAL_SOURCES,
-   USIGNAL_SENSITIVE,
-   USIGNAL_EVENT_CB,
+   SIGNAL_RESOLVED,
+   SIGNAL_LAST_VALUE,
+   SIGNAL_DECL,
+   SIGNAL_FLAGS,
+   SIGNAL_N_SOURCES,
+   SIGNAL_OFFSET,
+   SIGNAL_SOURCES,
+   SIGNAL_SENSITIVE,
+   SIGNAL_EVENT_CB,
 
-   USIGNAL_N_FIELDS
+   SIGNAL_N_FIELDS
 };
 
-// User signal flags
+// Signal flags
 enum {
-   USIGNAL_F_ACTIVE = (1 << 0),
-   USIGNAL_F_EVENT  = (1 << 1),
-   USIGNAL_F_UPDATE = (1 << 2)
+   SIGNAL_F_ACTIVE = (1 << 0),
+   SIGNAL_F_EVENT  = (1 << 1),
+   SIGNAL_F_UPDATE = (1 << 2)
 };
 
-#endif // RT_USIGNAL_H
+#endif // RT_SIGNAL_H
