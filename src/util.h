@@ -26,9 +26,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
-#if defined __CYGWIN__
 #include <stdarg.h>
-#endif
 
 #include "loc.h"
 
@@ -59,6 +57,8 @@ void fmt_loc(FILE *f, const loc_t *loc);
 
 void show_stacktrace(void);
 void register_trace_signal_handlers(void);
+
+void term_init(void);
 
 void write_u32(uint32_t u, FILE *f);
 void write_u16(uint16_t s, FILE *f);
