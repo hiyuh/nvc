@@ -45,15 +45,24 @@
 #include <sys/sysctl.h>
 #endif
 
-#ifdef HAVE_CURSES
-#if defined HAVE_NCURSES_H
-#include <ncurses.h>
+#if defined HAVE_NCURSESW_CURSES_H
+#include <ncursesw/curses.h>
+#include <ncursesw/term.h>
+#elif defined HAVE_NCURSESW_H
+#include <ncursesw.h>
 #include <term.h>
 #elif defined HAVE_NCURSES_CURSES_H
 #include <ncurses/curses.h>
 #include <ncurses/term.h>
+#elif defined HAVE_NCURSES_H
+#include <ncurses.h>
+#include <term.h>
+#elif defined HAVE_CURSES_H
+#include <curses.h>
+#include <term.h>
+#else
+#error "SysV or X/Open-compatible Curses header file required"
 #endif
-#endif  // HAVE_CURSES
 
 // The IP register is different depending on the CPU arch
 // Try x86-64 first then regular x86: nothing else is supported
