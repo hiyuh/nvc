@@ -1,13 +1,15 @@
 --------------------------------------------
 Fix error at compiling src/slave.c on cygwin
 --------------------------------------------
-Cygwin gcc includes src/rt/signal.h at #include <signal.h> in sys/poll.h.
-This is really odd.
-Maybe, real fix is fix cygwin gcc itself.
-One of workaround is rename src/rt/signal.h.
+On my fork, I added -I- into AM_CFLAGS after -I.
 
-On my fork, I renamed signal.h to usignal.h.
-To do so, I can get nvc.exe but it's a bit awkward to me.
+Note that -I- has been deprecated and we should use -iquote instead of -I:
+
+ http://gcc.gnu.org/onlinedocs/gcc/Directory-Options.html
+
+But automake puts -I into DEFAULT_INCLUDES:
+
+ http://lists.gnu.org/archive/html/automake/2009-07/msg00006.html
 
 See more detail:
 
