@@ -16,9 +16,9 @@
 //
 
 #include "rt.h"
-#include "tree.h"
-#include "lib.h"
-#include "util.h"
+#include "../tree.h"
+#include "../lib.h"
+#include "../util.h"
 #include "signal.h"
 #include "slave.h"
 #include "alloc.h"

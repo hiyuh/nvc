@@ -18,7 +18,7 @@
 #ifndef _RT_ALLOC_H
 #define _RT_ALLOC_H
 
-#include "util.h"
+#include "../util.h"
 
 #include <assert.h>
 

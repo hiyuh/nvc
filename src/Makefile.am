@@ -6,6 +6,7 @@ noinst_LIBRARIES = libcgen.a libnvc.a
 AM_CFLAGS = -Wall -Werror
 AM_YFLAGS = -d --locations --report=all
 AM_LDFLAGS = -rdynamic $(LLVM_LDFLAGS)
+DEFAULT_INCLUDES = 
 
 BUILT_SOURCES = parse.h
 

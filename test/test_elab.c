@@ -1,7 +1,7 @@
-#include "parse.h"
-#include "type.h"
-#include "util.h"
-#include "phase.h"
+#include "../src/parse.h"
+#include "../src/type.h"
+#include "../src/util.h"
+#include "../src/phase.h"
 
 #include <check.h>
 #include <stdlib.h>
