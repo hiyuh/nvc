@@ -1,4 +1,4 @@
-#include "../src/ident.h"
+#include "ident.h"
 
 #include <check.h>
 #include <stdlib.h>

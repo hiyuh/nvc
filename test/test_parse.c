@@ -1,6 +1,6 @@
-#include "../src/parse.h"
-#include "../src/type.h"
-#include "../src/util.h"
+#include "parse.h"
+#include "type.h"
+#include "util.h"
 
 #include <check.h>
 #include <stdlib.h>

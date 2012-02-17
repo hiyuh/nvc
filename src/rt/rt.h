@@ -18,7 +18,7 @@
 #ifndef _RT_H
 #define _RT_H
 
-#include "../ident.h"
+#include "ident.h"
 
 #include <stdint.h>
 

@@ -1,4 +1,4 @@
-#include "../src/rt/heap.h"
+#include "rt/heap.h"
 
 #include <check.h>
 #include <stdlib.h>

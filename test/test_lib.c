@@ -1,6 +1,6 @@
-#include "../src/lib.h"
-#include "../src/tree.h"
-#include "../src/util.h"
+#include "lib.h"
+#include "tree.h"
+#include "util.h"
 
 #include <check.h>
 #include <stdlib.h>

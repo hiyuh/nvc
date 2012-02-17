@@ -7,8 +7,8 @@ src = $(top_srcdir)/src
 build = $(top_builddir)/src
 shared = $(src)/util.c
 
-AM_CFLAGS = -DTESTDIR=\"$(top_srcdir)/test\" $(CHECK_CFLAGS)
-DEFAULT_INCLUDES = 
+AM_CFLAGS = -I $(src) -I $(build) -DTESTDIR=\"$(top_srcdir)/test\" \
+	$(CHECK_CFLAGS)
 LDADD = -lcheck $(build)/rt/libnvc-rt.a $(build)/libnvc.a $(CHECK_LIBS) \
 	$(CURSES_LIB)
 AM_LDFLAGS = -rdynamic

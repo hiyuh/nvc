@@ -16,7 +16,7 @@
 //
 
 #include "slave.h"
-#include "../util.h"
+#include "util.h"
 
 #include <stdlib.h>
 #include <assert.h>

@@ -16,8 +16,8 @@
 //
 
 #include "rt.h"
-#include "../util.h"
-#include "../lib.h"
+#include "util.h"
+#include "lib.h"
 
 #include <assert.h>
 #include <limits.h>
