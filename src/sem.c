@@ -365,16 +365,23 @@ static void type_set_force(type_t t)
    top_type_set->universal  = false;
 }
 
-static bool type_set_uniq(type_t *pt)
+static bool type_set_uniq_composite(type_t *pt)
 {
    assert(top_type_set != NULL);
 
-   if (top_type_set->n_members == 1) {
-      *pt = top_type_set->members[0];
-      return true;
+   *pt = NULL;
+   for (int i = 0; i < top_type_set->n_members; i++) {
+      type_kind_t kind = type_kind(top_type_set->members[i]);
+      bool comp = (kind == T_CARRAY || kind == T_UARRAY);
+      if (comp) {
+         if (*pt != NULL)
+            return false;
+         else
+            *pt = top_type_set->members[i];
+      }
    }
-   else
-      return false;
+
+   return true;
 }
 
 #if 0
@@ -560,6 +567,10 @@ static void sem_declare_predefined_ops(tree_t decl)
       // Operators on arrays
       sem_declare_binary(ident_new("\"=\""), t, t, std_bool, "aeq");
       sem_declare_binary(ident_new("\"/=\""), t, t, std_bool, "aneq");
+      sem_declare_binary(ident_new("\"<\""), t, t, std_bool, "alt");
+      sem_declare_binary(ident_new("\"<=\""), t, t, std_bool, "aleq");
+      sem_declare_binary(ident_new("\">\""), t, t, std_bool, "agt");
+      sem_declare_binary(ident_new("\">=\""), t, t, std_bool, "ageq");
       break;
 
    case T_PHYSICAL:
@@ -1835,6 +1846,13 @@ static bool sem_check_cassign(tree_t t)
    return true;
 }
 
+static unsigned sem_array_dimension(type_t a)
+{
+   return (type_kind(a) == T_CARRAY
+           ? type_dims(a)
+           : type_index_constrs(a));
+}
+
 static bool sem_check_conversion(tree_t t)
 {
    // Type conversions are described in LRM 93 section 7.3.5
@@ -1871,11 +1889,7 @@ static bool sem_check_conversion(tree_t t)
 
    if (from_array && to_array) {
       // Types must have same dimensionality
-      unsigned from_dim = (from_k == T_CARRAY ? type_dims(from)
-                           : type_index_constrs(from));
-      unsigned to_dim   = (to_k == T_CARRAY ? type_dims(to)
-                           : type_index_constrs(to));
-      bool same_dim = (from_dim == to_dim);
+      bool same_dim = (sem_array_dimension(from) == sem_array_dimension(to));
 
       // TODO: index types the same or closely related
 
@@ -1944,6 +1958,9 @@ static bool sem_check_fcall(tree_t t)
          }
       }
    } while (decl != NULL);
+
+   if (n_overloads == 0)
+      sem_error(t, "undefined identifier %s", istr(tree_ident(t)));
 
    // Work out which parameters have ambiguous interpretations
    bool ambiguous[tree_params(t)];
@@ -2187,7 +2204,14 @@ static bool sem_check_concat(tree_t t)
    tree_t left  = tree_param(t, 0).value;
    tree_t right = tree_param(t, 1).value;
 
-   if (!sem_check(left) || !sem_check(right))
+   bool ok, left_ambiguous;
+   sem_maybe_ambiguous(left, &left_ambiguous);
+   if (left_ambiguous)
+      ok = sem_check(right) && sem_check_constrained(left, tree_type(right));
+   else
+      ok = sem_check(left) && sem_check_constrained(right, tree_type(left));
+
+   if (!ok)
       return false;
 
    type_t ltype;
@@ -2198,20 +2222,39 @@ static bool sem_check_concat(tree_t t)
    if (!sem_check_subtype(right, tree_type(right), &rtype))
       return false;
 
-   if (type_kind(ltype) == T_CARRAY && type_kind(rtype) == T_CARRAY) {
-      // Simple case where both sides are constrained arrays
+   type_kind_t lkind = type_kind(ltype);
+   type_kind_t rkind = type_kind(rtype);
+
+   bool l_array = (lkind == T_CARRAY || lkind == T_UARRAY);
+   bool r_array = (rkind == T_CARRAY || rkind == T_UARRAY);
+
+   if (l_array && r_array) {
       if (!type_eq(ltype, rtype))
          sem_error(t, "cannot concatenate arrays of different types");
 
-      if (type_dims(ltype) > 1)
+      if (sem_array_dimension(ltype) > 1)
          sem_error(t, "cannot concatenate arrays with more than one dimension");
 
-      type_t index_type = tree_type(type_dim(ltype, 0).left);
+      type_t index_type;
+      if (lkind == T_CARRAY)
+         index_type = tree_type(type_dim(ltype, 0).left);
+      else
+         index_type = type_index_constr(ltype, 0);
 
       range_t index_r = type_dim(index_type, 0);
 
-      tree_t left_len = sem_array_len(ltype);
-      tree_t right_len = sem_array_len(rtype);
+      type_t std_int = sem_std_type("INTEGER");
+      tree_t left_len, right_len;
+
+      if (lkind == T_CARRAY)
+         left_len = sem_array_len(ltype);
+      else
+         left_len = sem_call_builtin("length", "length", std_int, left, NULL);
+
+      if (rkind == T_CARRAY)
+         right_len = sem_array_len(rtype);
+      else
+         right_len = sem_call_builtin("length", "length", std_int, right, NULL);
 
       type_t result = type_new(T_CARRAY);
       type_set_ident(result, type_ident(ltype));
@@ -2264,7 +2307,7 @@ static bool sem_check_aggregate(tree_t t)
    // context in which the aggregate appears
 
    type_t composite_type;
-   if (!type_set_uniq(&composite_type))
+   if (!type_set_uniq_composite(&composite_type))
       sem_error(t, "type of aggregate is ambiguous");
 
    // Aggregates are only valid for composite types
@@ -2395,6 +2438,7 @@ static bool sem_check_ref(tree_t t)
       break;
 
    case T_FUNC_DECL:
+   case T_FUNC_BODY:
       tree_change_kind(t, T_FCALL);
       tree_set_type(t, type_result(tree_type(decl)));
       break;
