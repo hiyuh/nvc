@@ -1,17 +1,30 @@
 -------------------------
 Fix "make check" failures
 -------------------------
-On my fork, I can get nvc.exe but "make check" fails.
+On my fork (nickg's also), I can get nvc.exe but "make check" fails.
 
-Symptoms of "make check" faiulres look not deterministic.
-Maybe, this problem is caused by fsckin' resident anti-virus software?
+Symptoms of "make check" faiulres look not deterministic, if I use
+test/run_regr.rb.
+This problem is caused by fsckin' resident anti-virus software, or?
 I've tried to disable my anti-virus software, but no joy.
 I use AVG Internet Security 2012 at this moment.
 
 See more detail:
 
+ $ unmae -a
+ CYGWIN_NT-5.1 jabberwocky 1.7.10(0.259/5/3) 2012-02-05 12:36 i686 Cygwin
+
+ (LLVM which I used is packaged by official cygwin devs.)
+ $ llvm-config --version
+ 3.0
+
  $ git clone git@github.com:hiyuh/nvc.git
  $ cd ~/git-repos/nvc
+
+ $ ./autogen.sh && ./configure
+ [SNIP]
+
+ (prepare lib/ieee, see lib/ieee/README.)
 
  $ make check
  [SNIP]
@@ -45,11 +58,16 @@ See more detail:
 
          assign1 : failed (timeout)
 
-           wait2 : failed
-/home/hiyuh/git-repos/nvc/src/nvc -a /home/hiyuh/git-repos/nvc/test/regress/wait2.vhd
-/home/hiyuh/git-repos/nvc/src/nvc -e wait2
+           wait2 : failed (timeout)
 
-          arith1 : ./run_regr.rb:51:in `kill': Permission denied (Errno::EACCES)
+          arith1 : failed
+ /home/hiyuh/git-repos/nvc/src/nvc -a /home/hiyuh/git-repos/nvc/test/regress/arith1.vhd
+
+         signal1 : failed
+ /home/hiyuh/git-repos/nvc/src/nvc -a /home/hiyuh/git-repos/nvc/test/regress/signal1.vhd
+ /home/hiyuh/git-repos/nvc/src/nvc -e signal1
+
+           attr1 : ./run_regr.rb:51:in `kill': Invalid argument (Errno::EINVAL)
          from ./run_regr.rb:51:in `run_cmd'
          from ./run_regr.rb:57:in `analyse'
          from ./run_regr.rb:112
@@ -62,4 +80,178 @@ See more detail:
  1 of 8 tests failed
  Please report to Nick Gasson <nick@nick.me.uk>
  ==============================================
+ Makefile:391: recipe for target `check-TESTS' failed
+ make[2]: *** [check-TESTS] Error 1
+ make[2]: Leaving directory `/home/hiyuh/git-repos/nvc/test'
  [SNIP]
+
+To be sure, on my fork, I added test/run_regr.sh as a replacement of test/run_regr.rb.
+Using test/run_regr.sh, analyze and elaborate look OK to me, but run vomits LLVM ERROR
+for all regressions.
+
+LLVM has had similar bug when it was 2.5:
+
+ http://llvm.org/bugs/show_bug.cgi?id=3897
+
+Just enbug this at 3.0?
+Or, src/cgen.c requires more trick to get functions from src/rt/rtkern.c on cygwin?
+
+See more detail:
+
+ $ cd test
+ $ ./test_regr.sh analyze all
+ [SNIP]
+ $ ./test_regr.sh elaborate all
+ [SNIP]
+ $ ./test_regr.sh run all
+ > run
+ >> run agg1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r agg1
+ LLVM ERROR: Program used external function '_array_copy' which could not be resolved!
+ >> run agg2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r agg2
+ LLVM ERROR: Program used external function '_array_copy' which could not be resolved!
+ >> run alias1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r alias1
+ LLVM ERROR: Program used external function '_array_copy' which could not be resolved!
+ >> run alias2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r alias2
+ LLVM ERROR: Program used external function '_array_copy' which could not be resolved!
+ >> run arith1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r arith1
+ LLVM ERROR: Program used external function '_sched_process' which could not be resolved!
+ >> run array1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r array1
+ LLVM ERROR: Program used external function '_image' which could not be resolved!
+ >> run assert1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r assert1
+ LLVM ERROR: Program used external function '_sched_process' which could not be resolved!
+ >> run assign1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r assign1
+ LLVM ERROR: Program used external function '_sched_process' which could not be resolved!
+ >> run assign2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r assign2
+ LLVM ERROR: Program used external function '_assert_fail' which could not be resolved!
+ >> run assign3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r assign3
+ LLVM ERROR: Program used external function '_assert_fail' which could not be resolved!
+ >> run attr1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r attr1
+ LLVM ERROR: Program used external function '_sched_process' which could not be resolved!
+ >> run case1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r case1
+ LLVM ERROR: Program used external function '_sched_process' which could not be resolved!
+ >> run concat1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r concat1
+ LLVM ERROR: Program used external function '_array_copy' which could not be resolved!
+ >> run concat2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r concat2
+ LLVM ERROR: Program used external function '_array_copy' which could not be resolved!
+ >> run cond1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r cond1
+ LLVM ERROR: Program used external function '_assert_fail' which could not be resolved!
+ >> run cond2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r cond2
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run cond3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r cond3
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run counter
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r counter --stop-time=50ns
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run elab1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r elab1
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run elab2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r elab2
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run fact
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r fact
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run for1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r for1
+ LLVM ERROR: Program used external function '_image' which could not be resolved!
+ >> run func1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r func1
+ LLVM ERROR: Program used external function '_image' which could not be resolved!
+ >> run func2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r func2
+ LLVM ERROR: Program used external function '_assert_fail' which could not be resolved!
+ >> run func3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r func3
+ LLVM ERROR: Program used external function '_array_copy' which could not be resolved!
+ >> run func4
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r func4
+ LLVM ERROR: Program used external function '_array_copy' which could not be resolved!
+ >> run func5
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r func5
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run ieee1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r ieee1
+ LLVM ERROR: Program used external function '_array_copy' which could not be resolved!
+ >> run ieee2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r ieee2 --stop-time=15ns
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run image
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r image
+ LLVM ERROR: Program used external function '_sched_process' which could not be resolved!
+ >> run last_value
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r last_value
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run lfsr
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r lfsr --stop-time=510ns
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run link1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r link1
+ LLVM ERROR: Program used external function '_sched_process' which could not be resolved!
+ >> run logical1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r logical1
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run operator1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r operator1
+ LLVM ERROR: Program used external function '_sched_process' which could not be resolved!
+ >> run operator2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r operator2
+ LLVM ERROR: Program used external function '_array_copy' which could not be resolved!
+ >> run signal1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r signal1
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run signal2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r signal2
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run signal3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r signal3
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run signal4
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r signal4
+ LLVM ERROR: Program used external function '_array_copy' which could not be resolved!
+ >> run signal5
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r signal5
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run signal6
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r signal6
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run slice1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r slice1
+ LLVM ERROR: Program used external function '_array_copy' which could not be resolved!
+ >> run vecorder
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r vecorder
+ LLVM ERROR: Program used external function '_assert_fail' which could not be resolved!
+ >> run wait1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r wait1
+ LLVM ERROR: Program used external function '_sched_process' which could not be resolved!
+ >> run wait2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r wait2
+ LLVM ERROR: Program used external function '_sched_process' which could not be resolved!
+ >> run wait3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r wait3
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run wait4
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r wait4
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run wait5
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r wait5
+ LLVM ERROR: Program used external function '_sched_waveform' which could not be resolved!
+ >> run while1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r while1
+ LLVM ERROR: Program used external function '_sched_process' which could not be resolved!
