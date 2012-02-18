@@ -99,11 +99,11 @@ Or, src/cgen.c requires more trick to get functions from src/rt/rtkern.c on cygw
 See more detail:
 
  $ cd test
- $ ./test_regr.sh analyze all
+ $ ./run_regr.sh analyze all
  [SNIP]
- $ ./test_regr.sh elaborate all
+ $ ./run_regr.sh elaborate all
  [SNIP]
- $ ./test_regr.sh run all
+ $ ./run_regr.sh run all
  > run
  >> run agg1
  NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r agg1
