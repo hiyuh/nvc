@@ -18,7 +18,7 @@ See more detail:
  $ llvm-config --version
  3.0
 
- $ git clone git@github.com:hiyuh/nvc.git
+ $ git clone git://github.com/hiyuh/nvc.git
  $ cd ~/git-repos/nvc
 
  $ ./autogen.sh && ./configure
