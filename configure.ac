@@ -64,11 +64,28 @@ PKG_CHECK_MODULES([CHECK], [check >= 0.9.4], [], [])
 
 AX_DEFINE_DIR([DATADIR], [datadir/nvc], [Installation data directory])
 
-# On cygwin local headers can sometimes be included instead
-# of system ones which is worked around using -I-. A better
-# solution would be to have automake use -iquote.
 case $host_os in
-  *cygwin* ) CFLAGS="$CFLAGS -I-" ;;
+  *cygwin* )
+    # On cygwin, local headers can sometimes be included instead
+    # of system ones which is worked around using -I-. A better
+    # solution would be to have automake use -iquote.
+    CFLAGS="$CFLAGS -I-"
+
+    # On cygwin, the dlsym function can only find symbols in a loaded DLL.
+    # If the symbol is in the .EXE file then the symbol doesn't get found.
+    AC_LIBTOOL_WIN32_DLL
+    AC_LIBLTDL_CONVENIENCE
+    dnl AC_LIBLTDL_INSTALLABLE
+    AC_LIBTOOL_DLOPEN
+    AC_PROG_LIBTOOL
+    dnl AC_CONFIG_SUBDIR([ibltdl)
+    LT_CONFIG_LTDL_DIR([libltdl])
+    AC_CONFIG_AUX_DIR([libltdl/config])
+    AC_CONFIG_MACRO_DIR([libltdl/m4])
+    AC_LIB_LTDL
+    AC_SUBST(INCLTDL)
+    AC_SUBST(LIBLTDL)
+  ;;
 esac
 
 AC_CONFIG_HEADERS([config.h])
