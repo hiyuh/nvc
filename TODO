@@ -272,7 +272,7 @@ And more Google'ing, I found this post on LLVMdev ML:
  > of functions on Cygwin is basically a large fraction of glibc, too
  > much to do by hand.
 
-But this is back in 2005, I don't know this is still correct in 2012, LLVM-3.0.
+But this is back in 2005, I don't know this is still correct in 2012, LLVM-3.0 + Cygwin-1.7.
 Maybe, a possible solution I think from this post has 3 steps:
 
  1. separate src/rt/* from nvc itself.
