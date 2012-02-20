@@ -6,6 +6,7 @@ libtoolize --ltdl --copy --force && \
 		sed -i \
 			-e 's/AC_OUTPUT/case $host_os in cygwin* | mingw* | pw32*) AC_DEFINE(__WINDOWS__) ;; esac ; AC_OUTPUT/' \
 			configure.ac && \
+		autoconf && \
 	cd ..
 aclocal -I m4
 autoconf
