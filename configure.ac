@@ -17,6 +17,27 @@ AC_PROG_YACC
 AM_PROG_LEX
 AC_PROG_RANLIB
 
+# On cygwin, the dlsym function can only find symbols in a loaded DLL.
+# If the symbol is in the .EXE file then the symbol doesn't get found.
+# FIXME: Using DSO on non-cygwin env is no benefit and only add complexity
+#        though, creating conditional auto* is more complex to me in initial
+#        and experimental change.
+#        At this moment, I'd like to create both of statically linked one
+#        and dynamically linked one, then I'll try to separate libtool's
+#        black magic iif required.
+AC_LIBTOOL_WIN32_DLL
+AC_LIBLTDL_CONVENIENCE
+dnl AC_LIBLTDL_INSTALLABLE
+AC_LIBTOOL_DLOPEN
+AC_PROG_LIBTOOL
+dnl AC_CONFIG_SUBDIR([ibltdl)
+LT_CONFIG_LTDL_DIR([libltdl])
+dnl AC_CONFIG_AUX_DIR([libltdl/config])
+dnl AC_CONFIG_MACRO_DIR([libltdl/m4])
+AC_LIB_LTDL
+AC_SUBST(INCLTDL)
+AC_SUBST(LIBLTDL)
+
 AC_C_INLINE
 
 AC_TYPE_SIZE_T
@@ -31,8 +52,8 @@ AC_TYPE_UINT32_T
 AC_TYPE_UINT64_T
 AC_TYPE_PID_T
 
-AC_FUNC_MMAP   
-AC_FUNC_ALLOCA 
+AC_FUNC_MMAP
+AC_FUNC_ALLOCA
 AC_FUNC_MALLOC
 AC_FUNC_REALLOC
 AC_FUNC_FORK
@@ -65,30 +86,21 @@ PKG_CHECK_MODULES([CHECK], [check >= 0.9.4], [], [])
 AX_DEFINE_DIR([DATADIR], [datadir/nvc], [Installation data directory])
 
 case $host_os in
-  *cygwin* )
+  *cygwin* | *mingw* | *pw32*)
+    ON_WIN32=yes
+
     # On cygwin, local headers can sometimes be included instead
     # of system ones which is worked around using -I-. A better
     # solution would be to have automake use -iquote.
-    CFLAGS="$CFLAGS -I-"
-
-    # On cygwin, the dlsym function can only find symbols in a loaded DLL.
-    # If the symbol is in the .EXE file then the symbol doesn't get found.
-    AC_LIBTOOL_WIN32_DLL
-    AC_LIBLTDL_CONVENIENCE
-    dnl AC_LIBLTDL_INSTALLABLE
-    AC_LIBTOOL_DLOPEN
-    AC_PROG_LIBTOOL
-    dnl AC_CONFIG_SUBDIR([ibltdl)
-    LT_CONFIG_LTDL_DIR([libltdl])
-    dnl AC_CONFIG_AUX_DIR([libltdl/config])
-    dnl AC_CONFIG_MACRO_DIR([libltdl/m4])
-    AC_LIB_LTDL
-    AC_SUBST(INCLTDL)
-    AC_SUBST(LIBLTDL)
+    # And more bad news, libltdl does't build w/ -I-.
+    # FIXME: mingw and pw32 really want it too?
+    I_BARRIER=-I-
   ;;
 esac
+AC_SUBST(ON_WIN32)
+AM_CONDITIONAL(ON_WIN32, test x"$ON_WIN32" = x"yes")
+AC_SUBST(I_BARRIER)
 
 AC_CONFIG_HEADERS([config.h])
 AC_OUTPUT([Makefile src/Makefile src/rt/Makefile test/Makefile \
            lib/Makefile lib/std/Makefile lib/ieee/Makefile])
-
