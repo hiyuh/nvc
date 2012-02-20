@@ -17,27 +17,6 @@ AC_PROG_YACC
 AM_PROG_LEX
 AC_PROG_RANLIB
 
-# On cygwin, the dlsym function can only find symbols in a loaded DLL.
-# If the symbol is in the .EXE file then the symbol doesn't get found.
-# FIXME: Using DSO on non-cygwin env is no benefit and only add complexity
-#        though, creating conditional auto* is more complex to me in initial
-#        and experimental change.
-#        At this moment, I'd like to create both of statically linked one
-#        and dynamically linked one, then I'll try to separate libtool's
-#        black magic iif required.
-AC_LIBTOOL_WIN32_DLL
-AC_LIBLTDL_CONVENIENCE
-dnl AC_LIBLTDL_INSTALLABLE
-AC_LIBTOOL_DLOPEN
-AC_PROG_LIBTOOL
-dnl AC_CONFIG_SUBDIR([ibltdl)
-LT_CONFIG_LTDL_DIR([libltdl])
-dnl AC_CONFIG_AUX_DIR([libltdl/config])
-dnl AC_CONFIG_MACRO_DIR([libltdl/m4])
-AC_LIB_LTDL
-AC_SUBST(INCLTDL)
-AC_SUBST(LIBLTDL)
-
 AC_C_INLINE
 
 AC_TYPE_SIZE_T
@@ -95,6 +74,23 @@ case $host_os in
     # And more bad news, libltdl does't build w/ -I-.
     # FIXME: mingw and pw32 really want it too?
     I_BARRIER=-I-
+
+    # On cygwin, the dlsym function can only find symbols in a loaded DLL.
+    # If the symbol is in the .EXE file then the symbol doesn't get found.
+    # See also:
+    #  http://lists.cs.uiuc.edu/pipermail/llvmdev/2005-June/004364.html
+    AC_LIBTOOL_WIN32_DLL
+    AC_LIBLTDL_CONVENIENCE
+    dnl AC_LIBLTDL_INSTALLABLE
+    AC_LIBTOOL_DLOPEN
+    AC_PROG_LIBTOOL
+    dnl AC_CONFIG_SUBDIR([ibltdl)
+    LT_CONFIG_LTDL_DIR([libltdl])
+    dnl AC_CONFIG_AUX_DIR([libltdl/config])
+    dnl AC_CONFIG_MACRO_DIR([libltdl/m4])
+    AC_LIB_LTDL
+    AC_SUBST(INCLTDL)
+    AC_SUBST(LIBLTDL)
   ;;
 esac
 AC_SUBST(ON_WIN32)
