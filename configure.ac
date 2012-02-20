@@ -80,8 +80,8 @@ case $host_os in
     AC_PROG_LIBTOOL
     dnl AC_CONFIG_SUBDIR([ibltdl)
     LT_CONFIG_LTDL_DIR([libltdl])
-    AC_CONFIG_AUX_DIR([libltdl/config])
-    AC_CONFIG_MACRO_DIR([libltdl/m4])
+    dnl AC_CONFIG_AUX_DIR([libltdl/config])
+    dnl AC_CONFIG_MACRO_DIR([libltdl/m4])
     AC_LIB_LTDL
     AC_SUBST(INCLTDL)
     AC_SUBST(LIBLTDL)
