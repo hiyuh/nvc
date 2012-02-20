@@ -281,3 +281,941 @@ Maybe, a possible solution I think from this post has 3 steps:
 
 For behavioral consistency, using DSO on linux is acceptable?
 Using DSO/DLL is not only useful but also evil...
+
+After make nvc.exe build w/ DLL, everything looks OK and I'd have to say
+ _____ _______        _ _    _  _____ _______  __          ______  _____  _  __ _____
+|_   _|__   __|      | | |  | |/ ____|__   __| \ \        / / __ \|  __ \| |/ // ____|
+  | |    | |         | | |  | | (___    | |     \ \  /\  / / |  | | |__) | ' /| (___
+  | |    | |     _   | | |  | |\___ \   | |      \ \/  \/ /| |  | |  _  /|  <  \___ \
+ _| |_   | |    | |__| | |__| |____) |  | |       \  /\  / | |__| | | \ \| . \ ____) |
+|_____|  |_|     \____/ \____/|_____/   |_|        \/  \/   \____/|_|  \_\_|\_\_____/
+
+Now, I should make a nice patch to nickg ASAP. :)
+
+See more detail:
+
+ $ uname -a
+ CYGWIN_NT-5.1 jabberwocky 1.7.10(0.259/5/3) 2012-02-05 12:36 i686 Cygwin
+
+ $ file src/nvc.exe
+ src/nvc.exe: PE32 executable (console) Intel 80386 (stripped to external PDB), for MS Windows
+
+ $ cygcheck src/nvc.exe
+ C:\cygwin\home\hiyuh\git-repos\nvc\src\nvc.exe
+   C:\cygwin\bin\cygwin1.dll
+     C:\WINDOWS\system32\KERNEL32.dll
+       C:\WINDOWS\system32\ntdll.dll
+
+ $ cd test
+ $ ./run_regr.sh each all
+ > analyze
+ >> analyze regress/agg1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/agg1.vhd
+ [gc: freed 392 trees; 432 allocated]
+ > elaborate
+ >> elaborate agg1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e agg1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.AGG1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.AGG1.elab.bc
+ > run
+ >> run agg1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r agg1
+ > analyze
+ >> analyze regress/agg2.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/agg2.vhd
+ [gc: freed 393 trees; 403 allocated]
+ > elaborate
+ >> elaborate agg2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e agg2
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.AGG2.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.AGG2.elab.bc
+ > run
+ >> run agg2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r agg2
+ > analyze
+ >> analyze regress/alias1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/alias1.vhd
+ [gc: freed 447 trees; 602 allocated]
+ > elaborate
+ >> elaborate alias1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e alias1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.ALIAS1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.ALIAS1.elab.bc
+ > run
+ >> run alias1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r alias1
+ 0ms+0: Report Note: --- X1 ---
+         File regress/alias1.vhd, Line 13
+ 0ms+0: Report Note: 1
+         File regress/alias1.vhd, Line 15
+ 0ms+0: Report Note: 2
+         File regress/alias1.vhd, Line 15
+ 0ms+0: Report Note: 3
+         File regress/alias1.vhd, Line 15
+ 0ms+0: Report Note: 4
+         File regress/alias1.vhd, Line 15
+ 0ms+0: Report Note: --- Y1 ---
+         File regress/alias1.vhd, Line 17
+ 0ms+0: Report Note: 1
+         File regress/alias1.vhd, Line 19
+ 0ms+0: Report Note: 2
+         File regress/alias1.vhd, Line 19
+ 0ms+0: Report Note: 3
+         File regress/alias1.vhd, Line 19
+ 0ms+0: Report Note: 4
+         File regress/alias1.vhd, Line 19
+ 0ms+0: Report Note: --- Z1 ---
+         File regress/alias1.vhd, Line 21
+ 0ms+0: Report Note: 1
+         File regress/alias1.vhd, Line 23
+ 0ms+0: Report Note: 2
+         File regress/alias1.vhd, Line 23
+ 0ms+0: Report Note: 3
+         File regress/alias1.vhd, Line 23
+ 0ms+0: Report Note: 4
+         File regress/alias1.vhd, Line 23
+ 1ns+0: Report Note: --- X2 ---
+         File regress/alias1.vhd, Line 34
+ 1ns+0: Report Note: 1
+         File regress/alias1.vhd, Line 36
+ 1ns+0: Report Note: 2
+         File regress/alias1.vhd, Line 36
+ 1ns+0: Report Note: 3
+         File regress/alias1.vhd, Line 36
+ 1ns+0: Report Note: 4
+         File regress/alias1.vhd, Line 36
+ 1ns+0: Report Note: --- Y2 ---
+         File regress/alias1.vhd, Line 38
+ 1ns+0: Report Note: 1
+         File regress/alias1.vhd, Line 40
+ 1ns+0: Report Note: 2
+         File regress/alias1.vhd, Line 40
+ 1ns+0: Report Note: 3
+         File regress/alias1.vhd, Line 40
+ 1ns+0: Report Note: 4
+         File regress/alias1.vhd, Line 40
+ 1ns+0: Report Note: --- Z2 ---
+         File regress/alias1.vhd, Line 42
+ 1ns+0: Report Note: 1
+         File regress/alias1.vhd, Line 44
+ 1ns+0: Report Note: 2
+         File regress/alias1.vhd, Line 44
+ 1ns+0: Report Note: 3
+         File regress/alias1.vhd, Line 44
+ 1ns+0: Report Note: 4
+         File regress/alias1.vhd, Line 44
+ > analyze
+ >> analyze regress/alias2.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/alias2.vhd
+ [gc: freed 435 trees; 525 allocated]
+ > elaborate
+ >> elaborate alias2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e alias2
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.ALIAS2.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.ALIAS2.elab.bc
+ > run
+ >> run alias2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r alias2
+ 0ms+0: Report Note: --- X ---
+         File regress/alias2.vhd, Line 11
+ 0ms+0: Report Note: 1
+         File regress/alias2.vhd, Line 13
+ 0ms+0: Report Note: 2
+         File regress/alias2.vhd, Line 13
+ 0ms+0: Report Note: 3
+         File regress/alias2.vhd, Line 13
+ 0ms+0: Report Note: 4
+         File regress/alias2.vhd, Line 13
+ 0ms+0: Report Note: --- Y ---
+         File regress/alias2.vhd, Line 15
+ 0ms+0: Report Note: 1
+         File regress/alias2.vhd, Line 17
+ 0ms+0: Report Note: 2
+         File regress/alias2.vhd, Line 17
+ 0ms+0: Report Note: 3
+         File regress/alias2.vhd, Line 17
+ 0ms+0: Report Note: 4
+         File regress/alias2.vhd, Line 17
+ 0ms+0: Report Note: --- Z ---
+         File regress/alias2.vhd, Line 19
+ 0ms+0: Report Note: 1
+         File regress/alias2.vhd, Line 21
+ 0ms+0: Report Note: 2
+         File regress/alias2.vhd, Line 21
+ 0ms+0: Report Note: 3
+         File regress/alias2.vhd, Line 21
+ 0ms+0: Report Note: 4
+         File regress/alias2.vhd, Line 21
+ 1ns+0: Report Note: --- X ---
+         File regress/alias2.vhd, Line 11
+ 1ns+0: Report Note: 1
+         File regress/alias2.vhd, Line 13
+ 1ns+0: Report Note: 2
+         File regress/alias2.vhd, Line 13
+ 1ns+0: Report Note: 3
+         File regress/alias2.vhd, Line 13
+ 1ns+0: Report Note: 4
+         File regress/alias2.vhd, Line 13
+ 1ns+0: Report Note: --- Y ---
+         File regress/alias2.vhd, Line 15
+ 1ns+0: Report Note: 1
+         File regress/alias2.vhd, Line 17
+ 1ns+0: Report Note: 2
+         File regress/alias2.vhd, Line 17
+ 1ns+0: Report Note: 3
+         File regress/alias2.vhd, Line 17
+ 1ns+0: Report Note: 4
+         File regress/alias2.vhd, Line 17
+ 1ns+0: Report Note: --- Z ---
+         File regress/alias2.vhd, Line 19
+ 1ns+0: Report Note: 1
+         File regress/alias2.vhd, Line 21
+ 1ns+0: Report Note: 2
+         File regress/alias2.vhd, Line 21
+ 1ns+0: Report Note: 3
+         File regress/alias2.vhd, Line 21
+ 1ns+0: Report Note: 4
+         File regress/alias2.vhd, Line 21
+ > analyze
+ >> analyze regress/arith1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/arith1.vhd
+ [gc: freed 402 trees; 703 allocated]
+ > elaborate
+ >> elaborate arith1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e arith1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.ARITH1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.ARITH1.elab.bc
+ > run
+ >> run arith1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r arith1
+ > analyze
+ >> analyze regress/array1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/array1.vhd
+ [gc: freed 397 trees; 488 allocated]
+ > elaborate
+ >> elaborate array1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e array1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.ARRAY1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.ARRAY1.elab.bc
+ > run
+ >> run array1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r array1
+ 0ms+0: Report Note: 3
+         File regress/array1.vhd, Line 18
+ 0ms+0: Report Note: 5
+         File regress/array1.vhd, Line 19
+ 0ms+0: Report Note: 3
+         File regress/array1.vhd, Line 22
+ > analyze
+ >> analyze regress/assert1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/assert1.vhd
+ [gc: freed 387 trees; 411 allocated]
+ > elaborate
+ >> elaborate assert1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e assert1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.ASSERT1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.ASSERT1.elab.bc
+ > run
+ >> run assert1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r assert1
+ 0ms+0: Report Note: hello world
+         File regress/assert1.vhd, Line 10
+ 0ms+0: Assertion Note: not important
+         File regress/assert1.vhd, Line 11
+ 0ms+0: Assertion Failure: Assertion violation.
+         File regress/assert1.vhd, Line 13
+ ** Fatal: cannot continue
+ > analyze
+ >> analyze regress/assign1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/assign1.vhd
+ [gc: freed 434 trees; 509 allocated]
+ > elaborate
+ >> elaborate assign1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e assign1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.ASSIGN1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.ASSIGN1.elab.bc
+ > run
+ >> run assign1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r assign1
+ > analyze
+ >> analyze regress/assign2.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/assign2.vhd
+ [gc: freed 386 trees; 474 allocated]
+ > elaborate
+ >> elaborate assign2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e assign2
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.ASSIGN2.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.ASSIGN2.elab.bc
+ > run
+ >> run assign2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r assign2
+ > analyze
+ >> analyze regress/assign3.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/assign3.vhd
+ [gc: freed 384 trees; 638 allocated]
+ > elaborate
+ >> elaborate assign3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e assign3
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.ASSIGN3.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.ASSIGN3.elab.bc
+ > run
+ >> run assign3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r assign3
+ > analyze
+ >> analyze regress/attr1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/attr1.vhd
+ [gc: freed 422 trees; 682 allocated]
+ > elaborate
+ >> elaborate attr1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e attr1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.ATTR1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.ATTR1.elab.bc
+ > run
+ >> run attr1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r attr1
+ > analyze
+ >> analyze regress/case1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/case1.vhd
+ [gc: freed 387 trees; 411 allocated]
+ > elaborate
+ >> elaborate case1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e case1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.CASE1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.CASE1.elab.bc
+ > run
+ >> run case1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r case1
+ 0ms+0: Report Note: five!
+         File regress/case1.vhd, Line 15
+ > analyze
+ >> analyze regress/concat1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/concat1.vhd
+ [gc: freed 415 trees; 406 allocated]
+ > elaborate
+ >> elaborate concat1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e concat1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.CONCAT1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.CONCAT1.elab.bc
+ > run
+ >> run concat1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r concat1
+ > analyze
+ >> analyze regress/concat2.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/concat2.vhd
+ [gc: freed 398 trees; 405 allocated]
+ > elaborate
+ >> elaborate concat2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e concat2
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.CONCAT2.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.CONCAT2.elab.bc
+ > run
+ >> run concat2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r concat2
+ > analyze
+ >> analyze regress/cond1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/cond1.vhd
+ [gc: freed 389 trees; 475 allocated]
+ > elaborate
+ >> elaborate cond1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e cond1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.COND1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.COND1.elab.bc
+ > run
+ >> run cond1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r cond1
+ 0ms+0: Report Note: x = y
+         File regress/cond1.vhd, Line 13
+ 0ms+0: Report Note: x /= y + 1
+         File regress/cond1.vhd, Line 20
+ 0ms+0: Report Note: x = y still
+         File regress/cond1.vhd, Line 25
+ > analyze
+ >> analyze regress/cond2.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/cond2.vhd
+ [gc: freed 416 trees; 428 allocated]
+ > elaborate
+ >> elaborate cond2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e cond2
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.COND2.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.COND2.elab.bc
+ > run
+ >> run cond2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r cond2
+ 1ns+0: Report Note: y = 2
+         File regress/cond2.vhd, Line 15
+ 1ns+0: Report Note: x /= 4
+         File regress/cond2.vhd, Line 19
+ > analyze
+ >> analyze regress/cond3.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/cond3.vhd
+ [gc: freed 610 trees; 638 allocated]
+ > elaborate
+ >> elaborate cond3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e cond3
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.COND3.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.COND3.elab.bc
+ > run
+ >> run cond3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r cond3
+ > analyze
+ >> analyze regress/counter.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/counter.vhd
+ [gc: freed 791 trees; 401 allocated]
+ > elaborate
+ >> elaborate counter
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e counter
+ [gc: freed 2 trees; 40188 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.COUNTER.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.COUNTER.elab.bc
+ > run
+ >> run counter
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r counter --stop-time=50ns
+ 0ms+0: Report Note: 0
+         File regress/counter.vhd, Line 44
+ 5ns+2: Report Note: 1
+         File regress/counter.vhd, Line 44
+ 15ns+2: Report Note: 2
+         File regress/counter.vhd, Line 44
+ 25ns+2: Report Note: 3
+         File regress/counter.vhd, Line 44
+ 35ns+2: Report Note: 4
+         File regress/counter.vhd, Line 44
+ 45ns+2: Report Note: 5
+         File regress/counter.vhd, Line 44
+ > analyze
+ >> analyze regress/elab1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/elab1.vhd
+ [gc: freed 816 trees; 440 allocated]
+ > elaborate
+ >> elaborate elab1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e elab1
+ [gc: freed 2 trees; 40172 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.ELAB1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.ELAB1.elab.bc
+ > run
+ >> run elab1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r elab1
+ > analyze
+ >> analyze regress/elab2.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/elab2.vhd
+ [gc: freed 816 trees; 503 allocated]
+ > elaborate
+ >> elaborate elab2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e elab2
+ [gc: freed 4 trees; 40186 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.ELAB2.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.ELAB2.elab.bc
+ > run
+ >> run elab2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r elab2
+ > analyze
+ >> analyze regress/fact.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/fact.vhd
+ [gc: freed 774 trees; 414 allocated]
+ > elaborate
+ >> elaborate fact
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e fact
+ [gc: freed 2 trees; 40192 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.FACT.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.FACT.elab.bc
+ > run
+ >> run fact
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r fact
+ 0ms+1: Report Note: 1
+         File regress/fact.vhd, Line 41
+ 0ms+3: Report Note: 2
+         File regress/fact.vhd, Line 41
+ 0ms+5: Report Note: 6
+         File regress/fact.vhd, Line 41
+ 0ms+7: Report Note: 24
+         File regress/fact.vhd, Line 41
+ 0ms+9: Report Note: 120
+         File regress/fact.vhd, Line 41
+ 0ms+11: Report Note: 720
+         File regress/fact.vhd, Line 41
+ 0ms+13: Report Note: 5040
+         File regress/fact.vhd, Line 41
+ 0ms+15: Report Note: 40320
+         File regress/fact.vhd, Line 41
+ 0ms+17: Report Note: 362880
+         File regress/fact.vhd, Line 41
+ 0ms+19: Report Note: 3628800
+         File regress/fact.vhd, Line 41
+ 0ms+21: Report Note: 39916800
+         File regress/fact.vhd, Line 41
+ 0ms+23: Report Note: 479001600
+         File regress/fact.vhd, Line 41
+ 0ms+25: Report Note: 1932053504
+         File regress/fact.vhd, Line 41
+ 0ms+27: Report Note: 1278945280
+         File regress/fact.vhd, Line 41
+ 0ms+29: Report Note: 2004310016
+         File regress/fact.vhd, Line 41
+ > analyze
+ >> analyze regress/for1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/for1.vhd
+ [gc: freed 393 trees; 373 allocated]
+ > elaborate
+ >> elaborate for1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e for1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.FOR1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.FOR1.elab.bc
+ > run
+ >> run for1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r for1
+ 0ms+0: Report Note: 1
+         File regress/for1.vhd, Line 10
+ 0ms+0: Report Note: 2
+         File regress/for1.vhd, Line 10
+ 0ms+0: Report Note: 3
+         File regress/for1.vhd, Line 10
+ 0ms+0: Report Note: 4
+         File regress/for1.vhd, Line 10
+ 0ms+0: Report Note: 5
+         File regress/for1.vhd, Line 10
+ 0ms+0: Report Note: 100
+         File regress/for1.vhd, Line 13
+ 0ms+0: Report Note: 99
+         File regress/for1.vhd, Line 13
+ 0ms+0: Report Note: 98
+         File regress/for1.vhd, Line 13
+ 0ms+0: Report Note: 97
+         File regress/for1.vhd, Line 13
+ 0ms+0: Report Note: 96
+         File regress/for1.vhd, Line 13
+ 0ms+0: Report Note: 95
+         File regress/for1.vhd, Line 13
+ > analyze
+ >> analyze regress/func1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/func1.vhd
+ [gc: freed 387 trees; 357 allocated]
+ > elaborate
+ >> elaborate func1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e func1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.FUNC1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.FUNC1.elab.bc
+ > run
+ >> run func1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r func1
+ > analyze
+ >> analyze regress/func2.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/func2.vhd
+ [gc: freed 408 trees; 705 allocated]
+ > elaborate
+ >> elaborate func2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e func2
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.FUNC2.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.FUNC2.elab.bc
+ > run
+ >> run func2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r func2
+ > analyze
+ >> analyze regress/func3.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/func3.vhd
+ [gc: freed 419 trees; 762 allocated]
+ > elaborate
+ >> elaborate func3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e func3
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.FUNC3.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.FUNC3.elab.bc
+ > run
+ >> run func3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r func3
+ 0ms+0: Report Note: 1
+         File regress/func3.vhd, Line 47
+ 0ms+0: Report Note: 2
+         File regress/func3.vhd, Line 47
+ 0ms+0: Report Note: 3
+         File regress/func3.vhd, Line 47
+ 0ms+0: Report Note: 4
+         File regress/func3.vhd, Line 47
+ 0ms+0: Report Note: 5
+         File regress/func3.vhd, Line 47
+ > analyze
+ >> analyze regress/func4.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/func4.vhd
+ [gc: freed 393 trees; 407 allocated]
+ > elaborate
+ >> elaborate func4
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e func4
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.FUNC4.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.FUNC4.elab.bc
+ > run
+ >> run func4
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r func4
+ > analyze
+ >> analyze regress/func5.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/func5.vhd
+ [gc: freed 811 trees; 490 allocated]
+ > elaborate
+ >> elaborate func5
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e func5
+ [gc: freed 0 trees; 40175 allocated]
+ WORK.P
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.FUNC5.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.FUNC5.elab.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.P-body.bc
+ > run
+ >> run func5
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r func5
+ > analyze
+ >> analyze regress/ieee1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/ieee1.vhd
+ [gc: freed 682 trees; 675 allocated]
+ > elaborate
+ >> elaborate ieee1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e ieee1
+ [gc: freed 0 trees; 40175 allocated]
+ IEEE.STD_LOGIC_1164
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.IEEE1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.IEEE1.elab.bc /home/hiyuh/git-repos/nvc/lib/ieee/ieee/_IEEE.STD_LOGIC_1164-body.bc
+ > run
+ >> run ieee1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r ieee1
+ > analyze
+ >> analyze regress/ieee2.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/ieee2.vhd
+ [gc: freed 1181 trees; 657 allocated]
+ > elaborate
+ >> elaborate ieee2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e ieee2
+ [gc: freed 2 trees; 40223 allocated]
+ IEEE.STD_LOGIC_1164
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.IEEE2.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.IEEE2.elab.bc /home/hiyuh/git-repos/nvc/lib/ieee/ieee/_IEEE.STD_LOGIC_1164-body.bc
+ > run
+ >> run ieee2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r ieee2 --stop-time=15ns
+ 1ns+1: Report Note: clock!
+         File regress/ieee2.vhd, Line 48
+ 3ns+1: Report Note: clock!
+         File regress/ieee2.vhd, Line 48
+ 5ns+1: Report Note: clock!
+         File regress/ieee2.vhd, Line 48
+ 7ns+1: Report Note: clock!
+         File regress/ieee2.vhd, Line 48
+ 9ns+1: Report Note: clock!
+         File regress/ieee2.vhd, Line 48
+ 10ns+0: Report Note: 5
+         File regress/ieee2.vhd, Line 55
+ 11ns+1: Report Note: clock!
+         File regress/ieee2.vhd, Line 48
+ 13ns+1: Report Note: clock!
+         File regress/ieee2.vhd, Line 48
+ 15ns+1: Report Note: clock!
+         File regress/ieee2.vhd, Line 48
+ > analyze
+ >> analyze regress/image.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/image.vhd
+ [gc: freed 392 trees; 356 allocated]
+ > elaborate
+ >> elaborate image
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e image
+ [gc: freed 0 trees; 40175 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.IMAGE.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.IMAGE.elab.bc
+ > run
+ >> run image
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r image
+ 0ms+0: Report Note: 4
+         File regress/image.vhd, Line 10
+ 0ms+0: Report Note: -42
+         File regress/image.vhd, Line 11
+ 0ms+0: Report Note: 73
+         File regress/image.vhd, Line 13
+ > analyze
+ >> analyze regress/last_value.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/last_value.vhd
+ [gc: freed 523 trees; 673 allocated]
+ > elaborate
+ >> elaborate last_value
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e last_value
+ [gc: freed 0 trees; 40175 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.LAST_VALUE.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.LAST_VALUE.elab.bc
+ > run
+ >> run last_value
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r last_value
+ > analyze
+ >> analyze regress/lfsr.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/lfsr.vhd
+ [gc: freed 873 trees; 545 allocated]
+ > elaborate
+ >> elaborate lfsr
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e lfsr
+ [gc: freed 22 trees; 40240 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.LFSR.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.LFSR.elab.bc
+ > run
+ >> run lfsr
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r lfsr --stop-time=510ns
+ > analyze
+ >> analyze regress/link1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/link1.vhd
+ [gc: freed 760 trees; 378 allocated]
+ > elaborate
+ >> elaborate link1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e link1
+ [gc: freed 0 trees; 40158 allocated]
+ WORK.P
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.LINK1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.LINK1.elab.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.P-body.bc
+ > run
+ >> run link1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r link1
+ > analyze
+ >> analyze regress/logical1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/logical1.vhd
+ [gc: freed 434 trees; 840 allocated]
+ > elaborate
+ >> elaborate logical1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e logical1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.LOGICAL1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.LOGICAL1.elab.bc
+ > run
+ >> run logical1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r logical1
+ > analyze
+ >> analyze regress/null1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/null1.vhd
+ [gc: freed 416 trees; 472 allocated]
+ > elaborate
+ >> elaborate null1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e null1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.NULL1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.NULL1.elab.bc
+ > run
+ >> run null1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r null1
+ 0ms+0: Report Note: 0
+         File regress/null1.vhd, Line 21
+ 0ms+0: Report Note: 0
+         File regress/null1.vhd, Line 23
+ 0ms+0: Report Note: 0
+         File regress/null1.vhd, Line 25
+ > analyze
+ >> analyze regress/operator1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/operator1.vhd
+ [gc: freed 392 trees; 431 allocated]
+ > elaborate
+ >> elaborate operator1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e operator1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.OPERATOR1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.OPERATOR1.elab.bc
+ > run
+ >> run operator1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r operator1
+ > analyze
+ >> analyze regress/operator2.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/operator2.vhd
+ [gc: freed 403 trees; 543 allocated]
+ > elaborate
+ >> elaborate operator2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e operator2
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.OPERATOR2.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.OPERATOR2.elab.bc
+ > run
+ >> run operator2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r operator2
+ > analyze
+ >> analyze regress/signal1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/signal1.vhd
+ [gc: freed 438 trees; 477 allocated]
+ > elaborate
+ >> elaborate signal1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e signal1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.SIGNAL1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.SIGNAL1.elab.bc
+ > run
+ >> run signal1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r signal1
+ > analyze
+ >> analyze regress/signal2.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/signal2.vhd
+ [gc: freed 514 trees; 583 allocated]
+ > elaborate
+ >> elaborate signal2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e signal2
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.SIGNAL2.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.SIGNAL2.elab.bc
+ > run
+ >> run signal2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r signal2
+ > analyze
+ >> analyze regress/signal3.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/signal3.vhd
+ [gc: freed 585 trees; 619 allocated]
+ > elaborate
+ >> elaborate signal3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e signal3
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.SIGNAL3.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.SIGNAL3.elab.bc
+ > run
+ >> run signal3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r signal3
+ > analyze
+ >> analyze regress/signal4.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/signal4.vhd
+ [gc: freed 437 trees; 633 allocated]
+ > elaborate
+ >> elaborate signal4
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e signal4
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.SIGNAL4.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.SIGNAL4.elab.bc
+ > run
+ >> run signal4
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r signal4
+ > analyze
+ >> analyze regress/signal5.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/signal5.vhd
+ [gc: freed 422 trees; 425 allocated]
+ > elaborate
+ >> elaborate signal5
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e signal5
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.SIGNAL5.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.SIGNAL5.elab.bc
+ > run
+ >> run signal5
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r signal5
+ > analyze
+ >> analyze regress/signal6.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/signal6.vhd
+ [gc: freed 459 trees; 364 allocated]
+ > elaborate
+ >> elaborate signal6
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e signal6
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.SIGNAL6.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.SIGNAL6.elab.bc
+ > run
+ >> run signal6
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r signal6
+ 0ms+0: Report Note: 0
+         File regress/signal6.vhd, Line 16
+ 0ms+1: Report Note: 1
+         File regress/signal6.vhd, Line 16
+ 3ns+0: Report Note: 2
+         File regress/signal6.vhd, Line 16
+ 5ns+0: Report Note: 4
+         File regress/signal6.vhd, Line 16
+ 9ns+0: Report Note: 8
+         File regress/signal6.vhd, Line 16
+ > analyze
+ >> analyze regress/slice1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/slice1.vhd
+ [gc: freed 444 trees; 651 allocated]
+ > elaborate
+ >> elaborate slice1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e slice1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.SLICE1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.SLICE1.elab.bc
+ > run
+ >> run slice1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r slice1
+ > analyze
+ >> analyze regress/vecorder.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/vecorder.vhd
+ [gc: freed 423 trees; 664 allocated]
+ > elaborate
+ >> elaborate vecorder
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e vecorder
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.VECORDER.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.VECORDER.elab.bc
+ > run
+ >> run vecorder
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r vecorder
+ 0ms+0: Report Note: 2
+         File regress/vecorder.vhd, Line 17
+ 0ms+0: Report Note: 3
+         File regress/vecorder.vhd, Line 18
+ 0ms+1: Report Note: 2
+         File regress/vecorder.vhd, Line 28
+ 0ms+1: Report Note: 3
+         File regress/vecorder.vhd, Line 29
+ 0ms+1: Report Note: 3
+         File regress/vecorder.vhd, Line 36
+ 0ms+1: Report Note: 2
+         File regress/vecorder.vhd, Line 37
+ > analyze
+ >> analyze regress/wait1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/wait1.vhd
+ [gc: freed 460 trees; 426 allocated]
+ > elaborate
+ >> elaborate wait1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e wait1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.WAIT1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.WAIT1.elab.bc
+ > run
+ >> run wait1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r wait1
+ > analyze
+ >> analyze regress/wait2.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/wait2.vhd
+ [gc: freed 659 trees; 482 allocated]
+ > elaborate
+ >> elaborate wait2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e wait2
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.WAIT2.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.WAIT2.elab.bc
+ > run
+ >> run wait2
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r wait2
+ 3ns+1: Report Note: done proc2
+         File regress/wait2.vhd, Line 35
+ 3ns+2: Report Note: done proc1
+         File regress/wait2.vhd, Line 17
+ > analyze
+ >> analyze regress/wait3.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/wait3.vhd
+ [gc: freed 459 trees; 449 allocated]
+ > elaborate
+ >> elaborate wait3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e wait3
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.WAIT3.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.WAIT3.elab.bc
+ > run
+ >> run wait3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r wait3
+ > analyze
+ >> analyze regress/wait4.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/wait4.vhd
+ [gc: freed 488 trees; 580 allocated]
+ > elaborate
+ >> elaborate wait4
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e wait4
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.WAIT4.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.WAIT4.elab.bc
+ > run
+ >> run wait4
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r wait4
+ > analyze
+ >> analyze regress/wait5.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/wait5.vhd
+ [gc: freed 490 trees; 465 allocated]
+ > elaborate
+ >> elaborate wait5
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e wait5
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.WAIT5.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.WAIT5.elab.bc
+ > run
+ >> run wait5
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r wait5
+ > analyze
+ >> analyze regress/while1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/while1.vhd
+ [gc: freed 407 trees; 373 allocated]
+ > elaborate
+ >> elaborate while1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e while1
+ [gc: freed 0 trees; 40158 allocated]
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.WHILE1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.WHILE1.elab.bc
+ > run
+ >> run while1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r while1
+ 0ms+0: Report Note: 5
+         File regress/while1.vhd, Line 11
+ 0ms+0: Report Note: 4
+         File regress/while1.vhd, Line 11
+ 0ms+0: Report Note: 3
+         File regress/while1.vhd, Line 11
+ 0ms+0: Report Note: 2
+         File regress/while1.vhd, Line 11
+ 0ms+0: Report Note: 1
+         File regress/while1.vhd, Line 11
+ 0ms+0: Report Note: 0
+         File regress/while1.vhd, Line 15
+ 1ns+0: Report Note: 1
+         File regress/while1.vhd, Line 15
+ 2ns+0: Report Note: 2
+         File regress/while1.vhd, Line 15
+ 3ns+0: Report Note: 3
+         File regress/while1.vhd, Line 15
+ 4ns+0: Report Note: 4
+         File regress/while1.vhd, Line 15
