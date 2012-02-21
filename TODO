@@ -1219,3 +1219,37 @@ See more detail:
          File regress/while1.vhd, Line 15
  4ns+0: Report Note: 4
          File regress/while1.vhd, Line 15
+
+FYI, I checked w/ this dirty DLL hack, linux build has no problem for me.
+
+See more detail:
+
+ $ uname -a
+ Linux wombat 3.2.5-gentoo #1 Thu Feb 9 14:47:53 JST 2012 ppc 7447A, altivec supported PowerMac10,2 GNU/Linux
+
+ $ ./autogen.sh
+ [SNIP]
+ $ ./configure
+ [SNIP]
+ $ make
+ [SNIP]
+
+ $ ldd src/nvc
+ linux-vdso32.so.1 =>  (0x00100000)
+ libpthread.so.0 => /lib/libpthread.so.0 (0x0ffc5000)
+ libffi.so.5 => /usr/lib/libffi.so.5 (0x0ff9c000)
+ libncursesw.so.5 => /lib/libncursesw.so.5 (0x0ff33000)
+ libtcl8.5.so => /usr/lib/libtcl8.5.so (0x0fe16000)
+ libdl.so.2 => /lib/libdl.so.2 (0x0fdf2000)
+ libreadline.so.6 => /lib/libreadline.so.6 (0x0fd98000)
+ libstdc++.so.6 => /usr/lib/gcc/powerpc-unknown-linux-gnu/4.5.3/libstdc++.so.6 (0x0fc65000)
+ libm.so.6 => /lib/libm.so.6 (0x0fb9c000)
+ libgcc_s.so.1 => /lib/libgcc_s.so.1 (0x0fb65000)
+ libc.so.6 => /lib/libc.so.6 (0x0f9d9000)
+ /lib/ld.so.1 (0x48000000)
+ libncurses.so.5 => /lib/libncurses.so.5 (0x0f977000)
+
+------------------------------------------------------------------------------------------
+Fix "*** glibc detected *** path/to/nvc : double free or corruption (out): 0xXXXXXXXX ***"
+-----------------------------------------------------------------------------------------
+I should fix this problem on Gentoo/PowerPC, by the way.
