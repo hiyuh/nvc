@@ -28,7 +28,9 @@ libnvc_stub_la_SOURCES = lib.c util.c ident.c parse.y lexer.l tree.c type.c \
 	rt/rtkern.c rt/slave.c rt/shell.c rt/alloc.c rt/vcd.c rt/heap.c \
 	rt/jit.c
 # See configure.ac for detail of @I_BARRIER@
-libnvc_stub_la_CFLAGS = $(AM_CFLAGS) -I$(srcdir)/rt @I_BARRIER@ $(LLVM_CFLAGS)
+# libtool adds -D_GNU_SOURCE, then ""_GNU_SOURCE" redefined" warning appears.
+# libtool adds -DNDEBUG, then "control reaches end of non-void function" warning appears.
+libnvc_stub_la_CFLAGS = $(AM_CFLAGS) -I$(srcdir)/rt @I_BARRIER@ $(LLVM_CFLAGS) -U_GNU_SOURCE -UNDEBUG
 libnvc_stub_la_LIBADD = $(LLVM_LIBS) $(CURSES_LIB)
 nvc_LDADD = libnvc-stub.la $(LLVM_LIBS) $(CURSES_LIB)
 else
