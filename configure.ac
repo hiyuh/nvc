@@ -15,30 +15,13 @@ AC_PROG_INSTALL
 AC_PROG_MKDIR_P
 AC_PROG_YACC
 AM_PROG_LEX
-AC_PROG_RANLIB
 
 # On cygwin, the dlsym function can only find symbols in a loaded DLL.
 # If the symbol is in the .EXE file then the symbol doesn't get found.
 # See also:
 #  http://lists.cs.uiuc.edu/pipermail/llvmdev/2005-June/004364.html
-# FIXME: Following libtool's black magic could not be used only for
-#        cygwin, b/c ./configure vomits a error on linux box like this:
-#         $ ./configure
-#         [SNIP]
-#         configure: error: conditional "INSTALL_LTDL" was never defined.
-#         Usually this means the macro was only invoked conditionally.
-AC_LIBTOOL_WIN32_DLL
-AC_LIBLTDL_CONVENIENCE
-dnl AC_LIBLTDL_INSTALLABLE
-AC_LIBTOOL_DLOPEN
-AC_PROG_LIBTOOL
-dnl AC_CONFIG_SUBDIR([ibltdl)
-LT_CONFIG_LTDL_DIR([libltdl])
-dnl AC_CONFIG_AUX_DIR([libltdl/config])
-dnl AC_CONFIG_MACRO_DIR([libltdl/m4])
-AC_LIB_LTDL
-AC_SUBST(INCLTDL)
-AC_SUBST(LIBLTDL)
+LT_INIT([shared,static,win32-dll])
+AC_SUBST([LIBTOOL_DEPS])
 
 AC_C_INLINE
 

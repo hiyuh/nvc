@@ -13,6 +13,8 @@ Makefile.in
 /compile
 *.o
 *.a
+*.lo
+*.la
 *~
 TAGS
 logs
@@ -21,12 +23,16 @@ src/lexer.c
 src/parse.[ch]
 src/parse.output
 .deps
+.libs
 /config.h
 /config.log
 /config.status
 /config.guess
 /config.sub
+/libtool
+/ltmain.sh
 /src/nvc
+/src/nvc.exe
 /lib/std/std
 /lib/ieee/ieee
 stamp-h1

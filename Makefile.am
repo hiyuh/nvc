@@ -1,4 +1,4 @@
-SUBDIRS = libltdl src lib test
+SUBDIRS = src lib test
 
 EXTRA_DIST = autogen.sh
 
