@@ -1249,6 +1249,146 @@ See more detail:
  /lib/ld.so.1 (0x48000000)
  libncurses.so.5 => /lib/libncurses.so.5 (0x0f977000)
 
+Well, nickg fix this by using LLVMAddGlobalMapping().
+It is simpler than libtool's black magic.
+After reverting some files to nickg's master, I got:
+
+ $ make check
+ [SNIP]
+ make[2]: Entering directory `/home/hiyuh/git-repos/nvc/test'
+ Running suite(s): lib
+ [gc: freed 0 trees; 35 allocated]
+ 100%: Checks: 3, Failures: 0, Errors: 0
+ PASS: test_lib.exe
+ Running suite(s): ident
+ 100%: Checks: 9, Failures: 0, Errors: 0
+ PASS: test_ident.exe
+ Running suite(s): parse
+ 100%: Checks: 19, Failures: 0, Errors: 0
+ PASS: test_parse.exe
+ Running suite(s): sem
+ 100%: Checks: 16, Failures: 0, Errors: 0
+ PASS: test_sem.exe
+ Running suite(s): simplify
+ 100%: Checks: 2, Failures: 0, Errors: 0
+ PASS: test_simp.exe
+ Running suite(s): elab
+ 100%: Checks: 3, Failures: 0, Errors: 0
+ PASS: test_elab.exe
+ Running suite(s): heap
+ 100%: Checks: 3, Failures: 0, Errors: 0
+ PASS: test_heap.exe
+           wait1 : failed (timeout)
+
+         assert1 : failed
+ /home/hiyuh/git-repos/nvc/src/nvc -a /home/hiyuh/git-repos/nvc/test/regress/assert1.vhd
+
+         assign1 : ./run_regr.rb:51:in `kill': No such process (Errno::ESRCH)
+         from ./run_regr.rb:51:in `run_cmd'
+         from ./run_regr.rb:69:in `run'
+         from ./run_regr.rb:114
+         from ./run_regr.rb:109:in `chdir'
+         from ./run_regr.rb:109
+         from ./run_regr.rb:106:in `each'
+         from ./run_regr.rb:106
+ FAIL: run_regr.rb
+ ==============================================
+ 1 of 8 tests failed
+ Please report to Nick Gasson <nick@nick.me.uk>
+ ==============================================
+ Makefile:391: recipe for target `check-TESTS' failed
+ make[2]: *** [check-TESTS] Error 1
+ make[2]: Leaving directory `/home/hiyuh/git-repos/nvc/test'
+
+But test/run_regr.sh is OK.
+So I guess test/run_regr.rb has tight timeout spec for my cygwin env, it was 1s.
+And maybe test/run_regr.rb does not expect "timeout but test is OK", that results
+above weird error on assert1 regression.
+I know this timeout fuctionalities is required for automatically batch test in
+general, but valid timeout spec depends on used machine spec and so on.
+
+After set its timeout spec to 3s, it looks OK to me:
+
+ make[2]: Entering directory `/home/hiyuh/git-repos/nvc/test'
+ Running suite(s): lib
+ [gc: freed 0 trees; 35 allocated]
+ 100%: Checks: 3, Failures: 0, Errors: 0
+ PASS: test_lib.exe
+ Running suite(s): ident
+ 100%: Checks: 9, Failures: 0, Errors: 0
+ PASS: test_ident.exe
+ Running suite(s): parse
+ 100%: Checks: 19, Failures: 0, Errors: 0
+ PASS: test_parse.exe
+ Running suite(s): sem
+ 100%: Checks: 16, Failures: 0, Errors: 0
+ PASS: test_sem.exe
+ Running suite(s): simplify
+ 100%: Checks: 2, Failures: 0, Errors: 0
+ PASS: test_simp.exe
+ Running suite(s): elab
+ 100%: Checks: 3, Failures: 0, Errors: 0
+ PASS: test_elab.exe
+ Running suite(s): heap
+ 100%: Checks: 3, Failures: 0, Errors: 0
+ PASS: test_heap.exe
+           wait1 : ok
+         assert1 : ok
+         assign1 : ok
+           wait2 : ok
+          arith1 : ok
+         signal1 : ok
+           attr1 : ok
+         signal2 : ok
+         signal3 : ok
+         assign2 : ok
+         assign3 : ok
+         signal4 : ok
+           wait3 : ok
+           wait4 : ok
+           wait5 : ok
+           elab1 : ok
+           image : ok
+           cond1 : ok
+         counter : ok
+      last_value : ok
+           cond2 : ok
+        vecorder : ok
+           elab2 : ok
+           func1 : ok
+         signal5 : ok
+          while1 : ok
+         signal6 : ok
+          slice1 : ok
+        logical1 : ok
+            lfsr : ok
+           link1 : ok
+            for1 : ok
+       operator1 : ok
+            fact : ok
+           func2 : ok
+          alias1 : ok
+          alias2 : ok
+           func3 : ok
+           func4 : ok
+       operator2 : ok
+          array1 : ok
+            agg1 : ok
+            agg2 : ok
+           case1 : ok
+           func5 : ok
+           ieee1 : ok
+           ieee2 : ok
+           cond3 : ok
+         concat1 : ok
+         concat2 : ok
+           null1 : ok
+ PASS: run_regr.rb
+ ==================
+ All 8 tests passed
+ ==================
+ make[2]: Leaving directory `/home/hiyuh/git-repos/nvc/test'
+
 ------------------------------------------------------------------------------------------
 Fix "*** glibc detected *** path/to/nvc : double free or corruption (out): 0xXXXXXXXX ***"
 -----------------------------------------------------------------------------------------
