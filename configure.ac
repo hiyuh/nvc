@@ -15,13 +15,7 @@ AC_PROG_INSTALL
 AC_PROG_MKDIR_P
 AC_PROG_YACC
 AM_PROG_LEX
-
-# On cygwin, the dlsym function can only find symbols in a loaded DLL.
-# If the symbol is in the .EXE file then the symbol doesn't get found.
-# See also:
-#  http://lists.cs.uiuc.edu/pipermail/llvmdev/2005-June/004364.html
-LT_INIT([shared,static,win32-dll])
-AC_SUBST([LIBTOOL_DEPS])
+AC_PROG_RANLIB
 
 AC_C_INLINE
 
@@ -37,8 +31,8 @@ AC_TYPE_UINT32_T
 AC_TYPE_UINT64_T
 AC_TYPE_PID_T
 
-AC_FUNC_MMAP
-AC_FUNC_ALLOCA
+AC_FUNC_MMAP   
+AC_FUNC_ALLOCA 
 AC_FUNC_MALLOC
 AC_FUNC_REALLOC
 AC_FUNC_FORK
@@ -70,22 +64,14 @@ PKG_CHECK_MODULES([CHECK], [check >= 0.9.4], [], [])
 
 AX_DEFINE_DIR([DATADIR], [datadir/nvc], [Installation data directory])
 
+# On cygwin local headers can sometimes be included instead
+# of system ones which is worked around using -I-. A better
+# solution would be to have automake use -iquote.
 case $host_os in
-  *cygwin* | *mingw* | *pw32*)
-    ON_WIN32=yes
-
-    # On cygwin, local headers can sometimes be included instead
-    # of system ones which is worked around using -I-. A better
-    # solution would be to have automake use -iquote.
-    # And more bad news, libltdl does't build w/ -I-.
-    # FIXME: mingw and pw32 really want it too?
-    I_BARRIER=-I-
-  ;;
+  *cygwin* ) CFLAGS="$CFLAGS -I-" ;;
 esac
-AC_SUBST(ON_WIN32)
-AM_CONDITIONAL(ON_WIN32, test x"$ON_WIN32" = x"yes")
-AC_SUBST(I_BARRIER)
 
 AC_CONFIG_HEADERS([config.h])
 AC_OUTPUT([Makefile src/Makefile src/rt/Makefile test/Makefile \
            lib/Makefile lib/std/Makefile lib/ieee/Makefile])
+
