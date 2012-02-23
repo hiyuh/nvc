@@ -4,7 +4,56 @@ Port to clang and clang++
 Bad news, clang doesn't support -I-.
 It's time to override by DEFAULT_INCLUDES.
 
-And clang hates PATH_MAX.
+After setting DEFAULT_INCLUDES by -iquote, "make -k" shows:
+
+ $ make -k
+ [SNIP]
+ make[4]: Entering directory `/home/hiyuh/git-repos/nvc/src/rt'
+ clang -DHAVE_CONFIG_H -iquote ../.. -iquote . -iquote . -iquote ../../src -iquote ../../src     -Wall -Werror -g -O2 -MT shell.o -MD -MP -MF .deps/shell.Tpo -c -o shell.o shell.c
+ shell.c:226:10: error: implicit declaration of function 'add_history' is invalid in C99
+       [-Werror,-Wimplicit-function-declaration]
+          add_history(buf);
+          ^
+ 1 error generated.
+ Makefile:256: recipe for target `shell.o' failed
+ make[4]: *** [shell.o] Error 1
+ clang -DHAVE_CONFIG_H -iquote ../.. -iquote . -iquote . -iquote ../../src -iquote ../../src    -Wall -Werror -I/usr/include  -DNDEBUG -D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS -O3 -fomit-frame-pointer -g -O2 -MT libjit_a-jit.o -MD -MP -MF .deps/libjit_a-jit.Tpo -c -o libjit_a-jit.o `test -f 'jit.c' || echo './'`jit.c
+ jit.c:67:14: error: use of undeclared identifier 'PATH_MAX'
+    char path[PATH_MAX];
+              ^
+ 1 error generated.
+ Makefile:270: recipe for target `libjit_a-jit.o' failed
+ make[4]: *** [libjit_a-jit.o] Error 1
+ make[4]: Target `all' not remade because of errors.
+ make[4]: Leaving directory `/home/hiyuh/git-repos/nvc/src/rt'
+ make[4]: Entering directory `/home/hiyuh/git-repos/nvc/src'
+ clang -DHAVE_CONFIG_H -iquote .. -iquote . -iquote . -iquote ../src -iquote ../src     -Wall -Werror -g -O2 -MT lib.o -MD -MP -MF .deps/lib.Tpo -c -o lib.o lib.c
+ In file included from lib.c:28:
+ In file included from /usr/include/dirent.h:6:
+ /usr/include/sys/dirent.h:28:15: error: use of undeclared identifier 'NAME_MAX'
+   char d_name[NAME_MAX + 1];
+               ^
+ lib.c:41:25: error: use of undeclared identifier 'PATH_MAX'
+    char            path[PATH_MAX];
+                         ^
+ lib.c:107:13: error: use of undeclared identifier 'PATH_MAX'
+    char dir[PATH_MAX];
+             ^
+ lib.c:117:16: error: use of undeclared identifier 'PATH_MAX'
+    char marker[PATH_MAX];
+                ^
+ lib.c:127:20: error: use of undeclared identifier 'PATH_MAX'
+    static char buf[PATH_MAX];
+                    ^
+ lib.c:256:13: error: use of undeclared identifier 'PATH_MAX'
+    char buf[PATH_MAX];
+             ^
+ lib.c:307:16: error: unused variable 'search' [-Werror,-Wunused-variable]
+    const char *search = istr(ident);
+                ^
+ 7 errors generated.
+ Makefile:384: recipe for target `lib.o' failed
+ [SNIP]
 
 ------------------------------------------------------------------------------------------
 Fix "*** glibc detected *** path/to/nvc : double free or corruption (out): 0xXXXXXXXX ***"
