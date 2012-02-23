@@ -1,3 +1,11 @@
+-------------------------
+Port to clang and clang++
+-------------------------
+Bad news, clang doesn't support -I-.
+It's time to override by DEFAULT_INCLUDES.
+
+And clang hates PATH_MAX.
+
 ------------------------------------------------------------------------------------------
 Fix "*** glibc detected *** path/to/nvc : double free or corruption (out): 0xXXXXXXXX ***"
 ------------------------------------------------------------------------------------------
