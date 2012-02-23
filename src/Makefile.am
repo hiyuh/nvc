@@ -3,6 +3,7 @@ SUBDIRS = rt
 bin_PROGRAMS = nvc
 noinst_LIBRARIES = libcgen.a libnvc.a
 
+DEFAULT_INCLUDES = -iquote $(top_builddir) -iquote $(builddir) -iquote $(srcdir) -iquote $(top_builddir)/src -iquote $(top_srcdir)/src
 AM_CFLAGS = -Wall -Werror
 AM_YFLAGS = -d --locations --report=all
 AM_LDFLAGS = -rdynamic $(LLVM_LDFLAGS)

@@ -31,8 +31,8 @@ AC_TYPE_UINT32_T
 AC_TYPE_UINT64_T
 AC_TYPE_PID_T
 
-AC_FUNC_MMAP   
-AC_FUNC_ALLOCA 
+AC_FUNC_MMAP
+AC_FUNC_ALLOCA
 AC_FUNC_MALLOC
 AC_FUNC_REALLOC
 AC_FUNC_FORK
@@ -64,14 +64,6 @@ PKG_CHECK_MODULES([CHECK], [check >= 0.9.4], [], [])
 
 AX_DEFINE_DIR([DATADIR], [datadir/nvc], [Installation data directory])
 
-# On cygwin local headers can sometimes be included instead
-# of system ones which is worked around using -I-. A better
-# solution would be to have automake use -iquote.
-case $host_os in
-  *cygwin* ) CFLAGS="$CFLAGS -I-" ;;
-esac
-
 AC_CONFIG_HEADERS([config.h])
 AC_OUTPUT([Makefile src/Makefile src/rt/Makefile test/Makefile \
            lib/Makefile lib/std/Makefile lib/ieee/Makefile])
-

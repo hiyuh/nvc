@@ -1,6 +1,7 @@
 noinst_LIBRARIES = libnvc-rt.a libjit.a
 
-AM_CFLAGS = -Wall -Werror -I$(srcdir)/..
+DEFAULT_INCLUDES = -iquote $(top_builddir) -iquote $(builddir) -iquote $(srcdir) -iquote $(top_builddir)/src -iquote $(top_srcdir)/src
+AM_CFLAGS = -Wall -Werror
 
 libnvc_rt_a_SOURCES = rtkern.c slave.c shell.c alloc.c vcd.c heap.c
 
