@@ -1,4 +1,353 @@
 ------------------------------------------------------------------------------------------
 Fix "*** glibc detected *** path/to/nvc : double free or corruption (out): 0xXXXXXXXX ***"
 ------------------------------------------------------------------------------------------
-I should fix this problem on Gentoo/PowerPC, by the way.
+This "double free or corruption" occurs only on Gentoo/PowerPC.
+See more detail:
+
+ $ uname -a
+ Linux wombat 3.2.5-gentoo #1 Thu Feb 9 14:47:53 JST 2012 ppc 7447A, altivec supported PowerMac10,2 GNU/Linux
+
+ $ eix -Ic sys-devel/llvm
+ [I] sys-devel/llvm (3.0-r1@02/17/12): Low Level Virtual Machine
+
+ $ llvm-config --version
+ 3.0
+
+ $ git clone git://github.com/hiyuh/nvc.git
+ [SNIP]
+ $ ./autogen.sh
+ [SNIP]
+ $ ./configure
+ [SNIP]
+ $ make
+ [SNIP]
+ $ make check
+ [SNIP]
+ make[2]: Entering directory `/home/hiyuh/git-repos/nvc/test'
+ Running suite(s): lib
+ [gc: freed 0 trees; 35 allocated]
+ 100%: Checks: 3, Failures: 0, Errors: 0
+ PASS: test_lib
+ Running suite(s): ident
+ 100%: Checks: 9, Failures: 0, Errors: 0
+ PASS: test_ident
+ Running suite(s): parse
+ 100%: Checks: 19, Failures: 0, Errors: 0
+ PASS: test_parse
+ Running suite(s): sem
+ 100%: Checks: 16, Failures: 0, Errors: 0
+ PASS: test_sem
+ Running suite(s): simplify
+ 100%: Checks: 2, Failures: 0, Errors: 0
+ PASS: test_simp
+ Running suite(s): elab
+ 100%: Checks: 3, Failures: 0, Errors: 0
+ PASS: test_elab
+ Running suite(s): heap
+ 100%: Checks: 3, Failures: 0, Errors: 0
+ PASS: test_heap
+           wait1 : ok
+         assert1 : ok
+         assign1 : ok
+           wait2 : ok
+          arith1 : ok
+         signal1 : ok
+           attr1 : ok
+         signal2 : ok
+         signal3 : ok
+         assign2 : ok
+         assign3 : ok
+         signal4 : ok
+           wait3 : ok
+           wait4 : ok
+           wait5 : ok
+           elab1 : ok
+           image : ok
+           cond1 : ok
+         counter : ok
+      last_value : ok
+           cond2 : ok
+        vecorder : ok
+           elab2 : ok
+           func1 : ok
+         signal5 : ok
+          while1 : ok
+         signal6 : ok
+          slice1 : ok
+        logical1 : ok
+            lfsr : ok
+           link1 : ok
+            for1 : ok
+       operator1 : ok
+            fact : ok
+           func2 : ok
+          alias1 : ok
+          alias2 : ok
+           func3 : ok
+           func4 : ok
+       operator2 : ok
+          array1 : ok
+            agg1 : ok
+            agg2 : ok
+           case1 : ok
+           func5 : ok
+           ieee1 : *** glibc detected *** /home/hiyuh/git-repos/nvc/src/nvc: double free or corruption (out): 0x10d16f78 ***
+ ======= Backtrace: =========
+ /lib/libc.so.6(+0x81d20)[0xfa5ad20]
+ /lib/libc.so.6(cfree+0x8c)[0xfa60054]
+ /home/hiyuh/git-repos/nvc/src/nvc[0x104cc09c]
+ /home/hiyuh/git-repos/nvc/src/nvc[0x104dcf8c]
+ /home/hiyuh/git-repos/nvc/src/nvc(_ZN4llvm13LPPassManager13runOnFunctionERNS_8FunctionE+0x5d8)[0x106c5fd0]
+ /home/hiyuh/git-repos/nvc/src/nvc(_ZN4llvm13FPPassManager13runOnFunctionERNS_8FunctionE+0x250)[0x10872168]
+ /home/hiyuh/git-repos/nvc/src/nvc(_ZN4llvm23FunctionPassManagerImpl3runERNS_8FunctionE+0x74)[0x108722e4]
+ /home/hiyuh/git-repos/nvc/src/nvc(_ZN4llvm19FunctionPassManager3runERNS_8FunctionE+0x88)[0x10872440]
+ /home/hiyuh/git-repos/nvc/src/nvc(_ZN4llvm3JIT14jitTheFunctionEPNS_8FunctionERKNS_10MutexGuardE+0x60)[0x1030f780]
+ /home/hiyuh/git-repos/nvc/src/nvc(_ZN4llvm3JIT24runJITOnFunctionUnlockedEPNS_8FunctionERKNS_10MutexGuardE+0x58)[0x1030fb04]
+ /home/hiyuh/git-repos/nvc/src/nvc(_ZN4llvm3JIT20getPointerToFunctionEPNS_8FunctionE+0x1b4)[0x1030fcf8]
+ /home/hiyuh/git-repos/nvc/src/nvc(_ZN4llvm15ExecutionEngine18getPointerToGlobalEPKNS_11GlobalValueE+0x224)[0x10330df4]
+ /home/hiyuh/git-repos/nvc/src/nvc(LLVMGetPointerToGlobal+0x24)[0x103368c4]
+ /home/hiyuh/git-repos/nvc/src/nvc(jit_fun_ptr+0x54)[0x10140814]
+ /home/hiyuh/git-repos/nvc/src/nvc[0x1013d0ac]
+ /home/hiyuh/git-repos/nvc/src/nvc(rt_batch_exec+0x60)[0x1013dd20]
+ /home/hiyuh/git-repos/nvc/src/nvc(main+0x8e4)[0x1010e384]
+ /lib/libc.so.6(+0x23110)[0xf9fc110]
+ /lib/libc.so.6(+0x232a0)[0xf9fc2a0]
+ ======= Memory map: ========
+ 00100000-00103000 r-xp 00000000 00:00 0          [vdso]
+ 0f977000-0f9b5000 r-xp 00000000 08:06 1480582    /lib/libncurses.so.5.9
+ 0f9b5000-0f9c5000 ---p 0003e000 08:06 1480582    /lib/libncurses.so.5.9
+ 0f9c5000-0f9c8000 r--p 0003e000 08:06 1480582    /lib/libncurses.so.5.9
+ 0f9c8000-0f9c9000 rw-p 00041000 08:06 1480582    /lib/libncurses.so.5.9
+ 0f9d9000-0fb3d000 r-xp 00000000 08:06 1740830    /lib/libc-2.14.1.so
+ 0fb3d000-0fb4d000 ---p 00164000 08:06 1740830    /lib/libc-2.14.1.so
+ 0fb4d000-0fb51000 r--p 00164000 08:06 1740830    /lib/libc-2.14.1.so
+ 0fb51000-0fb52000 rw-p 00168000 08:06 1740830    /lib/libc-2.14.1.so
+ 0fb52000-0fb55000 rw-p 00000000 00:00 0
+ 0fb65000-0fb7a000 r-xp 00000000 08:06 267158     /lib/libgcc_s.so.1
+ 0fb7a000-0fb8a000 ---p 00015000 08:06 267158     /lib/libgcc_s.so.1
+ 0fb8a000-0fb8b000 r--p 00015000 08:06 267158     /lib/libgcc_s.so.1
+ 0fb8b000-0fb8c000 rw-p 00016000 08:06 267158     /lib/libgcc_s.so.1
+ 0fb9c000-0fc41000 r-xp 00000000 08:06 1740232    /lib/libm-2.14.1.so
+ 0fc41000-0fc51000 ---p 000a5000 08:06 1740232    /lib/libm-2.14.1.so
+ 0fc51000-0fc54000 r--p 000a5000 08:06 1740232    /lib/libm-2.14.1.so
+ 0fc54000-0fc55000 rw-p 000a8000 08:06 1740232    /lib/libm-2.14.1.so
+ 0fc65000-0fd6c000 r-xp 00000000 08:06 2375450    /usr/lib/gcc/powerpc-unknown-linux-gnu/4.5.3/libstdc++.so.6.0.14
+ 0fd6c000-0fd7b000 ---p 00107000 08:06 2375450    /usr/lib/gcc/powerpc-unknown-linux-gnu/4.5.3/libstdc++.so.6.0.14
+ 0fd7b000-0fd80000 r--p 00106000 08:06 2375450    /usr/lib/gcc/powerpc-unknown-linux-gnu/4.5.3/libstdc++.so.6.0.14
+ 0fd80000-0fd82000 rw-p 0010b000 08:06 2375450    /usr/lib/gcc/powerpc-unknown-linux-gnu/4.5.3/libstdc++.so.6.0.14
+ 0fd82000-0fd88000 rw-p 00000000 00:00 0
+ 0fd98000-0fdcc000 r-xp 00000000 08:06 1203034    /lib/libreadline.so.6.2
+ 0fdcc000-0fddb000 ---p 00034000 08:06 1203034    /lib/libreadline.so.6.2
+ 0fddb000-0fddd000 r--p 00033000 08:06 1203034    /lib/libreadline.so.6.2
+ 0fddd000-0fde0000 rw-p 00035000 08:06 1203034    /lib/libreadline.so.6.2
+ 0fde0000-0fde2000 rw-p 00000000 00:00 0
+ 0fdf2000-0fee6000 r-xp 00000000 08:06 1593415    /usr/lib/libtcl8.5.so
+ 0fee6000-0fef5000 ---p 000f4000 08:06 1593415    /usr/lib/libtcl8.5.so
+ 0fef5000-0fefa000 r--p 000f3000 08:06 1593415    /usr/lib/libtcl8.5.so
+ 0fefa000-0fefe000 rw-p 000f8000 08:06 1593415    /usr/lib/libtcl8.5.so
+ 0fefe000-0feff000 rw-p 00000000 00:00 0
+ 0ff0f000-0ff55000 r-xp 00000000 08:06 1480465    /lib/libncursesw.so.5.9
+ 0ff55000-0ff64000 ---p 00046000 08:06 1480465    /lib/libncursesw.so.5.9
+ 0ff64000-0ff67000 r--p 00045000 08:06 1480465    /lib/libncursesw.so.5.9
+ 0ff67000-0ff68000 rw-p 00048000 08:06 1480465    /lib/libncursesw.so.5.9
+ 0ff78000-0ff7b000 r-xp 00000000 08:06 1740289    /lib/libdl-2.14.1.so
+ 0ff7b000-0ff8a000 ---p 00003000 08:06 1740289    /lib/libdl-2.14.1.so
+ 0ff8a000-0ff8b000 r--p 00002000 08:06 1740289    /lib/libdl-2.14.1.so
+ 0ff8b000-0ff8c000 rw-p 00003000 08:06 1740289    /lib/libdl-2.14.1.so
+ 0ff9c000-0ffa3000 r-xp 00000000 08:06 1204137    /usr/lib/libffi.so.5.0.10
+ 0ffa3000-0ffb3000 ---p 00007000 08:06 1204137    /usr/lib/libffi.so.5.0.10
+ 0ffb3000-0ffb4000 r--p 00007000 08:06 1204137    /usr/lib/libffi.so.5.0.10
+ 0ffb4000-0ffb5000 rw-p 00008000 08:06 1204137    /usr/lib/libffi.so.5.0.10
+ 0ffc5000-0ffdc000 r-xp 00000000 08:06 1740593    /lib/libpthread-2.14.1.so
+ 0ffdc000-0ffec000 ---p 00017000 08:06 1740593    /lib/libpthread-2.14.1.so
+ 0ffec000-0ffed000 r--p 00017000 08:06 1740593    /lib/libpthread-2.14.1.so
+ 0ffed000-0ffee000 rw-p 00018000 08:06 1740593    /lib/libpthread-2.14.1.so
+ 0ffee000-0fff0000 rw-p 00000000 00:00 0
+ 10000000-10956000 r-xp 00000000 08:06 841761     /home/hiyuh/git-repos/nvc/src/nvc
+ 10966000-1097d000 r--p 00956000 08:06 841761     /home/hiyuh/git-repos/nvc/src/nvc
+ 1097d000-10988000 rw-p 0096d000 08:06 841761     /home/hiyuh/git-repos/nvc/src/nvc
+ 10988000-1098f000 rwxp 00000000 00:00 0
+ 10c7c000-10d63000 rwxp 00000000 00:00 0          [heap]
+ 48000000-48020000 r-xp 00000000 08:06 1740829    /lib/ld-2.14.1.so
+ 48020000-48021000 rw-p 00000000 00:00 0
+ 48021000-48022000 r--p 00021000 08:06 1740829    /lib/ld-2.14.1.so
+ 48022000-48023000 rw-p 00022000 08:06 1740829    /lib/ld-2.14.1.so
+ 48023000-48025000 rw-p 00000000 00:00 0
+ 4802d000-48031000 rw-p 00000000 00:00 0
+ 48031000-480d1000 rwxp 00000000 00:00 0
+ bfdab000-bfdcc000 rw-p 00000000 00:00 0          [stack]
+ failed
+ /home/hiyuh/git-repos/nvc/src/nvc -a /home/hiyuh/git-repos/nvc/test/regress/ieee1.vhd
+ [gc: freed 682 trees; 675 allocated]
+ /home/hiyuh/git-repos/nvc/src/nvc -e ieee1
+ [gc: freed 0 trees; 726 allocated]
+ IEEE.STD_LOGIC_1164
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/logs/ieee1/work/_WORK.IEEE1.final.bc /home/hiyuh/git-repos/nvc/test/logs/ieee1/work/_WORK.IEEE1.elab.bc /home/hiyuh/git-repos/nvc/lib/ieee/ieee/_IEEE.STD_LOGIC_1164-body.bc
+ /home/hiyuh/git-repos/nvc/src/nvc -r  ieee1
+ Stack dump:
+ 0.      Running pass 'Loop Pass Manager' on function '@"IEEE.STD_LOGIC_1164.\22or\22$IEEE.STD_LOGIC_1164.STD_LOGIC_VECTOR$IEEE.STD_LOGIC_1164.STD_LOGIC_VECTOR"'
+ 1.      Running pass 'Loop Strength Reduction' on basic block '%while'
+
+           ieee2 : ok
+           cond3 : ok
+         concat1 : ok
+         concat2 : ok
+           null1 : ok
+ FAIL: run_regr.rb
+ ==============================================
+ 1 of 8 tests failed
+ Please report to Nick Gasson <nick@nick.me.uk>
+ ==============================================
+ make[2]: *** [check-TESTS] Error 1
+ make[2]: Leaving directory `/home/hiyuh/git-repos/nvc/test'
+ [SNIP]
+
+On the above log, "double free or corruption" occurs w/ ieee1 regression only.
+But this symptoms looks not deterministic.
+IIRC, I've got same error w/ other regression and also ieee1 regression finishes successfully sometimes.
+And it looks the problem is in LLVM internal.
+
+Try ieee1 regression again, and w/ valgrind:
+
+ $ cd test
+ $ ./run_regr.sh each ieee1
+ > analyze
+ >> analyze regress/ieee1.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/ieee1.vhd
+ [gc: freed 682 trees; 675 allocated]
+ > elaborate
+ >> elaborate ieee1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e ieee1
+ [gc: freed 0 trees; 726 allocated]
+ IEEE.STD_LOGIC_1164
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.IEEE1.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.IEEE1.elab.bc /home/hiyuh/git-repos/nvc/lib/ieee/ieee/_IEEE.STD_LOGIC_1164-body.bc
+ > run
+ >> run ieee1
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r ieee1
+ *** glibc detected *** ../src/nvc: double free or corruption (!prev): 0x1106d8b0 ***
+ ======= Backtrace: =========
+ /lib/libc.so.6(+0x81d20)[0xfa5ad20]
+ /lib/libc.so.6(cfree+0x8c)[0xfa60054]
+ /usr/lib/gcc/powerpc-unknown-linux-gnu/4.5.3/libstdc++.so.6(_ZdlPv+0x2c)[0xfd2fc98]
+ ../src/nvc[0x104cc210]
+ ../src/nvc[0x104dcf8c]
+ ../src/nvc(_ZN4llvm13LPPassManager13runOnFunctionERNS_8FunctionE+0x5d8)[0x106c5fd0]
+ ../src/nvc(_ZN4llvm13FPPassManager13runOnFunctionERNS_8FunctionE+0x250)[0x10872168]
+ ../src/nvc(_ZN4llvm23FunctionPassManagerImpl3runERNS_8FunctionE+0x74)[0x108722e4]
+ ../src/nvc(_ZN4llvm19FunctionPassManager3runERNS_8FunctionE+0x88)[0x10872440]
+ ../src/nvc(_ZN4llvm3JIT14jitTheFunctionEPNS_8FunctionERKNS_10MutexGuardE+0x60)[0x1030f780]
+ ../src/nvc(_ZN4llvm3JIT24runJITOnFunctionUnlockedEPNS_8FunctionERKNS_10MutexGuardE+0x58)[0x1030fb04]
+ ../src/nvc(_ZN4llvm3JIT20getPointerToFunctionEPNS_8FunctionE+0x1b4)[0x1030fcf8]
+ ../src/nvc(_ZN4llvm15ExecutionEngine18getPointerToGlobalEPKNS_11GlobalValueE+0x224)[0x10330df4]
+ ../src/nvc(LLVMGetPointerToGlobal+0x24)[0x103368c4]
+ ../src/nvc(jit_fun_ptr+0x54)[0x10140814]
+ ../src/nvc[0x1013d0ac]
+ ../src/nvc(rt_batch_exec+0x60)[0x1013dd20]
+ ../src/nvc(main+0x8e4)[0x1010e384]
+ /lib/libc.so.6(+0x23110)[0xf9fc110]
+ /lib/libc.so.6(+0x232a0)[0xf9fc2a0]
+ ======= Memory map: ========
+ 00100000-00103000 r-xp 00000000 00:00 0          [vdso]
+ 0f977000-0f9b5000 r-xp 00000000 08:06 1480582    /lib/libncurses.so.5.9
+ 0f9b5000-0f9c5000 ---p 0003e000 08:06 1480582    /lib/libncurses.so.5.9
+ 0f9c5000-0f9c8000 r--p 0003e000 08:06 1480582    /lib/libncurses.so.5.9
+ 0f9c8000-0f9c9000 rw-p 00041000 08:06 1480582    /lib/libncurses.so.5.9
+ 0f9d9000-0fb3d000 r-xp 00000000 08:06 1740830    /lib/libc-2.14.1.so
+ 0fb3d000-0fb4d000 ---p 00164000 08:06 1740830    /lib/libc-2.14.1.so
+ 0fb4d000-0fb51000 r--p 00164000 08:06 1740830    /lib/libc-2.14.1.so
+ 0fb51000-0fb52000 rw-p 00168000 08:06 1740830    /lib/libc-2.14.1.so
+ 0fb52000-0fb55000 rw-p 00000000 00:00 0
+ 0fb65000-0fb7a000 r-xp 00000000 08:06 267158     /lib/libgcc_s.so.1
+ 0fb7a000-0fb8a000 ---p 00015000 08:06 267158     /lib/libgcc_s.so.1
+ 0fb8a000-0fb8b000 r--p 00015000 08:06 267158     /lib/libgcc_s.so.1
+ 0fb8b000-0fb8c000 rw-p 00016000 08:06 267158     /lib/libgcc_s.so.1
+ 0fb9c000-0fc41000 r-xp 00000000 08:06 1740232    /lib/libm-2.14.1.so
+ 0fc41000-0fc51000 ---p 000a5000 08:06 1740232    /lib/libm-2.14.1.so
+ 0fc51000-0fc54000 r--p 000a5000 08:06 1740232    /lib/libm-2.14.1.so
+ 0fc54000-0fc55000 rw-p 000a8000 08:06 1740232    /lib/libm-2.14.1.so
+ 0fc65000-0fd6c000 r-xp 00000000 08:06 2375450    /usr/lib/gcc/powerpc-unknown-linux-gnu/4.5.3/libstdc++.so.6.0.14
+ 0fd6c000-0fd7b000 ---p 00107000 08:06 2375450    /usr/lib/gcc/powerpc-unknown-linux-gnu/4.5.3/libstdc++.so.6.0.14
+ 0fd7b000-0fd80000 r--p 00106000 08:06 2375450    /usr/lib/gcc/powerpc-unknown-linux-gnu/4.5.3/libstdc++.so.6.0.14
+ 0fd80000-0fd82000 rw-p 0010b000 08:06 2375450    /usr/lib/gcc/powerpc-unknown-linux-gnu/4.5.3/libstdc++.so.6.0.14
+ 0fd82000-0fd88000 rw-p 00000000 00:00 0
+ 0fd98000-0fdcc000 r-xp 00000000 08:06 1203034    /lib/libreadline.so.6.2
+ 0fdcc000-0fddb000 ---p 00034000 08:06 1203034    /lib/libreadline.so.6.2
+ 0fddb000-0fddd000 r--p 00033000 08:06 1203034    /lib/libreadline.so.6.2
+ 0fddd000-0fde0000 rw-p 00035000 08:06 1203034    /lib/libreadline.so.6.2
+ 0fde0000-0fde2000 rw-p 00000000 00:00 0
+ 0fdf2000-0fee6000 r-xp 00000000 08:06 1593415    /usr/lib/libtcl8.5.so
+ 0fee6000-0fef5000 ---p 000f4000 08:06 1593415    /usr/lib/libtcl8.5.so
+ 0fef5000-0fefa000 r--p 000f3000 08:06 1593415    /usr/lib/libtcl8.5.so
+ 0fefa000-0fefe000 rw-p 000f8000 08:06 1593415    /usr/lib/libtcl8.5.so
+ 0fefe000-0feff000 rw-p 00000000 00:00 0
+ 0ff0f000-0ff55000 r-xp 00000000 08:06 1480465    /lib/libncursesw.so.5.9
+ 0ff55000-0ff64000 ---p 00046000 08:06 1480465    /lib/libncursesw.so.5.9
+ 0ff64000-0ff67000 r--p 00045000 08:06 1480465    /lib/libncursesw.so.5.9
+ 0ff67000-0ff68000 rw-p 00048000 08:06 1480465    /lib/libncursesw.so.5.9
+ 0ff78000-0ff7b000 r-xp 00000000 08:06 1740289    /lib/libdl-2.14.1.so
+ 0ff7b000-0ff8a000 ---p 00003000 08:06 1740289    /lib/libdl-2.14.1.so
+ 0ff8a000-0ff8b000 r--p 00002000 08:06 1740289    /lib/libdl-2.14.1.so
+ 0ff8b000-0ff8c000 rw-p 00003000 08:06 1740289    /lib/libdl-2.14.1.so
+ 0ff9c000-0ffa3000 r-xp 00000000 08:06 1204137    /usr/lib/libffi.so.5.0.10
+ 0ffa3000-0ffb3000 ---p 00007000 08:06 1204137    /usr/lib/libffi.so.5.0.10
+ 0ffb3000-0ffb4000 r--p 00007000 08:06 1204137    /usr/lib/libffi.so.5.0.10
+ 0ffb4000-0ffb5000 rw-p 00008000 08:06 1204137    /usr/lib/libffi.so.5.0.10
+ 0ffc5000-0ffdc000 r-xp 00000000 08:06 1740593    /lib/libpthread-2.14.1.so
+ 0ffdc000-0ffec000 ---p 00017000 08:06 1740593    /lib/libpthread-2.14.1.so
+ 0ffec000-0ffed000 r--p 00017000 08:06 1740593    /lib/libpthread-2.14.1.so
+ 0ffed000-0ffee000 rw-p 00018000 08:06 1740593    /lib/libpthread-2.14.1.so
+ 0ffee000-0fff0000 rw-p 00000000 00:00 0
+ 10000000-10956000 r-xp 00000000 08:06 841761     /home/hiyuh/git-repos/nvc/src/nvc
+ 10966000-1097d000 r--p 00956000 08:06 841761     /home/hiyuh/git-repos/nvc/src/nvc
+ 1097d000-10988000 rw-p 0096d000 08:06 841761     /home/hiyuh/git-repos/nvc/src/nvc
+ 10988000-1098f000 rwxp 00000000 00:00 0
+ 10fa7000-1108e000 rwxp 00000000 00:00 0          [heap]
+ 48000000-48020000 r-xp 00000000 08:06 1740829    /lib/ld-2.14.1.so
+ 48020000-48021000 rw-p 00000000 00:00 0
+ 48021000-48022000 r--p 00021000 08:06 1740829    /lib/ld-2.14.1.so
+ 48022000-48023000 rw-p 00022000 08:06 1740829    /lib/ld-2.14.1.so
+ 48023000-48025000 rw-p 00000000 00:00 0
+ 4802d000-48031000 rw-p 00000000 00:00 0
+ 48031000-480d1000 rwxp 00000000 00:00 0
+ bf88a000-bf8ab000 rw-p 00000000 00:00 0          [stack]
+ Stack dump:
+ 0.      Running pass 'Loop Pass Manager' on function '@"IEEE.STD_LOGIC_1164.\22or\22$IEEE.STD_LOGIC_1164.STD_LOGIC_VECTOR$IEEE.STD_LOGIC_1164.STD_LOGIC_VECTOR"'
+ 1.      Running pass 'Loop Strength Reduction' on basic block '%while'
+ ./run_regr.sh: line 43: 15499 Aborted                 NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r ieee1
+
+ $ NVC_LIBPATH=../lib/std:../lib/ieee valgrind --leak-check=full ../src/nvc -r ieee1
+ ==15534== Memcheck, a memory error detector
+ ==15534== Copyright (C) 2002-2011, and GNU GPL'd, by Julian Seward et al.
+ ==15534== Using Valgrind-3.7.0 and LibVEX; rerun with -h for copyright info
+ ==15534== Command: ../src/nvc -r ieee1
+ ==15534==
+ ==15534==
+ ==15534== HEAP SUMMARY:
+ ==15534==     in use at exit: 191,901 bytes in 2,664 blocks
+ ==15534==   total heap usage: 13,884 allocs, 11,220 frees, 1,927,036 bytes allocated
+ ==15534==
+ ==15534== 8,640 bytes in 15 blocks are possibly lost in loss record 447 of 449
+ ==15534==    at 0xFFB6EB4: operator new(unsigned int) (vg_replace_malloc.c:282)
+ ==15534==    by 0x1087F69F: llvm::User::operator new(unsigned int, unsigned int) (in /home/hiyuh/git-repos/nvc/src/nvc)
+ ==15534==    by 0x107F3C7B: llvm::ConstantUniqueMap<std::vector<llvm::Constant*, std::allocator<llvm::Constant*> >, llvm::ArrayRef<llvm::Constant*>, llvm::ArrayType, llvm::ConstantArray, true>::Create(llvm::ArrayType*, llvm::ArrayRef<llvm::Constant*>, std::_Rb_tree_iterator<std::pair<std::pair<llvm::ArrayType*, std::vector<llvm::Constant*, std::allocator<llvm::Constant*> > > const, llvm::ConstantArray*> >) (in /home/hiyuh/git-repos/nvc/src/nvc)
+ ==15534==    by 0x107F40C3: llvm::ConstantUniqueMap<std::vector<llvm::Constant*, std::allocator<llvm::Constant*> >, llvm::ArrayRef<llvm::Constant*>, llvm::ArrayType, llvm::ConstantArray, true>::getOrCreate(llvm::ArrayType*, llvm::ArrayRef<llvm::Constant*>) (in /home/hiyuh/git-repos/nvc/src/nvc)
+ ==15534==    by 0x107E8C43: llvm::ConstantArray::get(llvm::ArrayType*, llvm::ArrayRef<llvm::Constant*>) (in /home/hiyuh/git-repos/nvc/src/nvc)
+ ==15534==    by 0x101604BF: llvm::BitcodeReader::ParseConstants() (in /home/hiyuh/git-repos/nvc/src/nvc)
+ ==15534==    by 0x1016265F: llvm::BitcodeReader::ParseModule() (in /home/hiyuh/git-repos/nvc/src/nvc)
+ ==15534==    by 0x101635BF: llvm::BitcodeReader::ParseBitcodeInto(llvm::Module*) (in /home/hiyuh/git-repos/nvc/src/nvc)
+ ==15534==    by 0x1016385B: llvm::getLazyBitcodeModule(llvm::MemoryBuffer*, llvm::LLVMContext&, std::string*) (in /home/hiyuh/git-repos/nvc/src/nvc)
+ ==15534==    by 0x1016390B: llvm::ParseBitcodeFile(llvm::MemoryBuffer*, llvm::LLVMContext&, std::string*) (in /home/hiyuh/git-repos/nvc/src/nvc)
+ ==15534==    by 0x10158B0F: LLVMParseBitcodeInContext (in /home/hiyuh/git-repos/nvc/src/nvc)
+ ==15534==    by 0x10158C07: LLVMParseBitcode (in /home/hiyuh/git-repos/nvc/src/nvc)
+ ==15534==
+ ==15534== LEAK SUMMARY:
+ ==15534==    definitely lost: 0 bytes in 0 blocks
+ ==15534==    indirectly lost: 0 bytes in 0 blocks
+ ==15534==      possibly lost: 8,640 bytes in 15 blocks
+ ==15534==    still reachable: 183,261 bytes in 2,649 blocks
+ ==15534==         suppressed: 0 bytes in 0 blocks
+ ==15534== Reachable blocks (those to which a pointer was found) are not shown.
+ ==15534== To see them, rerun with: --leak-check=full --show-reachable=yes
+ ==15534==
+ ==15534== For counts of detected and suppressed errors, rerun with: -v
+ ==15534== ERROR SUMMARY: 1 errors from 1 contexts (suppressed: 7 from 5)
