@@ -236,6 +236,16 @@ START_TEST(test_scope)
       sem_check(a);
    }
 
+   e = parse();
+   fail_if(e == NULL);
+   fail_unless(tree_kind(e) == T_ENTITY);
+   sem_check(e);
+
+   a = parse();
+   fail_if(a == NULL);
+   fail_unless(tree_kind(a) == T_ARCH);
+   sem_check(a);
+
    fail_unless(parse() == NULL);
    fail_unless(parse_errors() == 0);
 
@@ -482,6 +492,7 @@ START_TEST(test_array)
       { 89, "array W has 2 dimensions but 3 indices given" },
       { 98, "type of index universal integer does not match type" },
       { 102, "named and positional associations cannot be mixed in" },
+      { 111, "non-locally static choice must be only choice" },
       { -1, NULL }
    };
    expect_errors(expect);

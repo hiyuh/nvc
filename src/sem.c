@@ -61,6 +61,7 @@ struct type_set {
 static bool sem_check_constrained(tree_t t, type_t type);
 static bool sem_check_array_ref(tree_t t);
 static bool sem_declare(tree_t decl);
+static bool sem_locally_static(tree_t t);
 
 static struct scope    *top_scope = NULL;
 static int             errors = 0;
@@ -279,10 +280,12 @@ static void scope_replace(tree_t t, tree_t with)
 static bool scope_import_unit(context_t ctx, lib_t lib, bool all)
 {
    // Check we haven't already imported this
-   struct ident_list *it;
-   for (it = top_scope->imported; it != NULL; it = it->next) {
-      if (it->ident == ctx.name)
-         return true;
+   for (struct scope *s = top_scope; s != NULL; s = s->down) {
+      struct ident_list *it;
+      for (it = s->imported; it != NULL; it = it->next) {
+         if (it->ident == ctx.name)
+            return true;
+      }
    }
 
    tree_t unit = lib_get(lib, ctx.name);
@@ -1551,10 +1554,11 @@ static bool sem_check_package(tree_t t)
    ident_t qual = ident_prefix(lib_name(lib_work()), tree_ident(t), '.');
 
    assert(top_scope == NULL);
-   scope_push(qual);
+   scope_push(NULL);
 
    bool ok = sem_check_context(t);
    if (ok) {
+      scope_push(qual);
       for (unsigned n = 0; n < tree_decls(t); n++) {
          tree_t decl = tree_decl(t, n);
          ident_t unqual = tree_ident(decl);
@@ -1566,6 +1570,7 @@ static bool sem_check_package(tree_t t)
          else
             ok = false;
       }
+      scope_pop();
    }
 
    scope_pop();
@@ -1581,9 +1586,11 @@ static bool sem_check_package_body(tree_t t)
    ident_t qual = ident_prefix(lib_name(lib_work()), tree_ident(t), '.');
 
    assert(top_scope == NULL);
-   scope_push(qual);
+   scope_push(NULL);
 
    bool ok = sem_check_context(t);
+
+   scope_push(qual);
 
    // Look up package declaration
    context_t c = {
@@ -1617,6 +1624,7 @@ static bool sem_check_package_body(tree_t t)
    }
 
    scope_pop();
+   scope_pop();
 
    tree_set_ident(t, ident_prefix(qual, ident_new("body"), '-'));
    lib_put(lib_work(), t);
@@ -1629,16 +1637,17 @@ static bool sem_check_entity(tree_t t)
    assert(top_scope == NULL);
    scope_push(NULL);
 
-   if (!sem_check_context(t))
-      return false;
+   bool ok = sem_check_context(t);
 
-   bool ok = true;
+   scope_push(NULL);
+
    for (unsigned n = 0; n < tree_generics(t); n++)
       ok = sem_check(tree_generic(t, n)) && ok;
 
    for (unsigned n = 0; n < tree_ports(t); n++)
       ok = sem_check(tree_port(t, n)) && ok;
 
+   scope_pop();
    scope_pop();
 
    // Prefix the entity with the current library name
@@ -1664,7 +1673,9 @@ static bool sem_check_arch(tree_t t)
 
    // Make all port and generic declarations available in this scope
 
-   bool ok = sem_check_context(e);
+   bool ok = sem_check_context(e) && sem_check_context(t);
+
+   scope_push(NULL);
 
    for (unsigned n = 0; n < tree_ports(e); n++)
       scope_insert(tree_port(e, n));
@@ -1674,8 +1685,6 @@ static bool sem_check_arch(tree_t t)
 
    // Now check the architecture itself
 
-   ok = ok && sem_check_context(t);
-
    for (unsigned n = 0; n < tree_decls(t); n++)
       ok = sem_check(tree_decl(t, n)) && ok;
 
@@ -1684,6 +1693,7 @@ static bool sem_check_arch(tree_t t)
          ok = sem_check(tree_stmt(t, n)) && ok;
    }
 
+   scope_pop();
    scope_pop();
 
    // Prefix the architecture with the current library and entity name
@@ -2081,8 +2091,18 @@ static bool sem_check_fcall(tree_t t)
             if (type_params(func_type) != tree_params(t))
                continue;
 
-            // Found a matching function definition
-            overloads[n_overloads++] = decl;
+            // Same function may appear multiple times in the symbol
+            // table under different names
+            bool duplicate = false;
+            for (int i = 0; i < n_overloads; i++) {
+               if (overloads[i] == decl)
+                  duplicate = true;
+            }
+
+            if (!duplicate) {
+               // Found a matching function definition
+               overloads[n_overloads++] = decl;
+            }
          }
       }
    } while (decl != NULL);
@@ -2317,6 +2337,29 @@ static tree_t sem_array_len(type_t type)
    return sem_call_builtin("\"+\"", "add", index_type, tmp, one, NULL);
 }
 
+static bool sem_check_concat_param(tree_t t, type_t expect)
+{
+   type_set_push();
+
+   if (type_kind(expect) == T_CARRAY) {
+      // The bounds of one side should not be used to determine
+      // those of the other side
+      type_t u = type_new(T_UARRAY);
+      type_set_base(u, type_base(expect));
+      type_set_ident(u, type_ident(expect));
+      for (unsigned i = 0; i < type_dims(expect); i++)
+         type_add_index_constr(u, tree_type(type_dim(expect, i).left));
+      type_set_add(u);
+   }
+   else
+      type_set_add(expect);
+
+   bool ok = sem_check(t);
+   type_set_pop();
+
+   return ok;
+}
+
 static bool sem_check_concat(tree_t t)
 {
    // Concatenation expressions are treated differently to other operators
@@ -2326,14 +2369,22 @@ static bool sem_check_concat(tree_t t)
    tree_t left  = tree_param(t, 0).value;
    tree_t right = tree_param(t, 1).value;
 
-   type_set_push();
-
-   bool ok, left_ambiguous = false;
    type_t expect;
+   bool uniq_comp = type_set_uniq_composite(&expect);
+
+   bool ok, left_ambig = false, right_ambig = false;
    tree_t other;
 
-   sem_maybe_ambiguous(left, &left_ambiguous);
-   if (left_ambiguous) {
+   sem_maybe_ambiguous(left, &left_ambig);
+   sem_maybe_ambiguous(right, &right_ambig);
+
+   if (left_ambig && right_ambig) {
+      if (!uniq_comp)
+         sem_error(t, "type of concatenation is ambiguous");
+      ok = sem_check_concat_param(left, expect);
+      other = right;
+   }
+   else if (left_ambig) {
       if ((ok = sem_check(right))) {
          expect = tree_type(right);
          other  = left;
@@ -2346,26 +2397,7 @@ static bool sem_check_concat(tree_t t)
       }
    }
 
-   if (ok) {
-      if (type_kind(expect) == T_CARRAY) {
-         // The bounds of one side should not be used to determine
-         // those of the other side
-         type_t u = type_new(T_UARRAY);
-         type_set_base(u, type_base(expect));
-         type_set_ident(u, type_ident(expect));
-         for (unsigned i = 0; i < type_dims(expect); i++)
-            type_add_index_constr(u, tree_type(type_dim(expect, i).left));
-         type_set_add(u);
-      }
-      else
-         type_set_add(expect);
-
-      ok = ok && sem_check(other);
-   }
-
-   type_set_pop();
-
-   if (!ok)
+   if (!(ok && sem_check_concat_param(other, expect)))
       return false;
 
    type_t ltype;
@@ -2468,24 +2500,7 @@ static bool sem_check_aggregate(tree_t t)
 
    switch (type_kind(composite_type)) {
    case T_CARRAY:
-      break;
    case T_UARRAY:
-      {
-         // Create a new constrained array type with these dimensions
-
-         type_t tmp = type_new(T_CARRAY);
-         type_set_ident(tmp, type_ident(composite_type));
-         type_set_base(tmp, type_base(composite_type));  // Element type
-
-         // TODO: check index constraints
-
-         range_t r = { .kind  = RANGE_TO,
-                       .left  = sem_make_int(0),  // XXX: 'left of index type,
-                       .right = sem_make_int(tree_assocs(t) - 1) };  // XXX
-         type_add_dim(tmp, r);
-
-         composite_type = tmp;
-      }
       break;
    default:
       sem_error(t, "aggregates must have a composite type");
@@ -2536,6 +2551,47 @@ static bool sem_check_aggregate(tree_t t)
       sem_error(t, "named and positional associations cannot be "
                 "mixed in array aggregates");
 
+   // If the composite type is unconstrained create a new constrained
+   // array type
+
+   if (type_kind(composite_type) == T_UARRAY) {
+      type_t tmp = type_new(T_CARRAY);
+      type_set_ident(tmp, type_ident(composite_type));
+      type_set_base(tmp, type_base(composite_type));  // Element type
+
+      assert(type_index_constrs(composite_type) == 1);  // TODO
+
+      type_t index_type = type_index_constr(composite_type, 0);
+      range_t index_r = type_dim(index_type, 0);
+
+      if (have_named) {
+         tree_t low = sem_call_builtin("NVC.BUILTIN.AGG_LOW", "agg_low",
+                                       index_type, t, NULL);
+         tree_t high = sem_call_builtin("NVC.BUILTIN.AGG_HIGH", "agg_high",
+                                        index_type, t, NULL);
+
+         range_t r = {
+            .kind  = index_r.kind,
+            .left  = (index_r.kind == RANGE_TO ? low : high),
+            .right = (index_r.kind == RANGE_TO ? high : low)
+         };
+         type_add_dim(tmp, r);
+      }
+      else {
+         tree_t n_elems = sem_make_int(tree_assocs(t) - 1);
+
+         range_t r = {
+            .kind  = index_r.kind,
+            .left  = index_r.left,
+            .right = sem_call_builtin("\"+\"", "add", index_type, n_elems,
+                                      index_r.left, NULL)
+         };
+         type_add_dim(tmp, r);
+      }
+
+      composite_type = tmp;
+   }
+
    // All elements must be of the composite base type if this is
    // a one-dimensional array otherwise construct an array type
    // with n-1 dimensions.
@@ -2555,11 +2611,20 @@ static bool sem_check_aggregate(tree_t t)
    for (unsigned i = 0; i < tree_assocs(t); i++) {
       assoc_t a = tree_assoc(t, i);
 
-      if (a.kind == A_RANGE) {
+      switch (a.kind) {
+      case A_RANGE:
          if (!sem_check_range(&a.range))
             return false;
-
          tree_change_assoc(t, i, a);
+         break;
+
+      case A_NAMED:
+         if (!sem_check(a.name))  // TODO: constrained by index type
+            return false;
+         break;
+
+      default:
+         break;
       }
 
       if (!sem_check_constrained(a.value, base))
@@ -2571,6 +2636,18 @@ static bool sem_check_aggregate(tree_t t)
                    istr(type_ident(tree_type(a.value))),
                    istr(type_ident(base)));
 
+   }
+
+   // If a named choice is not locally static then it must be the
+   // only element
+
+   for (unsigned i = 0; i < tree_assocs(t); i++) {
+      assoc_t a = tree_assoc(t, i);
+      if (a.kind == A_NAMED && !sem_locally_static(a.name)) {
+         if (tree_assocs(t) != 1)
+            sem_error(a.name, "non-locally static choice must be "
+                      "only choice");
+      }
    }
 
    tree_set_type(t, composite_type);
