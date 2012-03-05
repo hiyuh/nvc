@@ -49,3 +49,11 @@ cond3           normal
 concat1         normal
 concat2         normal
 null1           normal
+agg3            normal
+proc1           normal
+alias3          normal
+proc2           normal
+operator3       normal
+agg4            normal
+ieee3           normal
+default1        normal

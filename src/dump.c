@@ -62,10 +62,7 @@ static void dump_expr(tree_t t)
    case T_FCALL:
       {
          const char *name = istr(tree_ident(tree_ref(t)));
-         if (isalpha((uint8_t)name[0]))
-            printf("%s", name);
-         else
-            printf("\"%s\"", name);
+         printf("%s", name);
          dump_params(t);
       }
       break;
@@ -128,6 +125,12 @@ static void dump_expr(tree_t t)
       printf("%s(", istr(tree_ident(tree_ref(t))));
       dump_expr(tree_param(t, 0).value);
       printf(")");
+      break;
+
+   case T_CONCAT:
+      dump_expr(tree_param(t, 0).value);
+      printf(" & ");
+      dump_expr(tree_param(t, 1).value);
       break;
 
    default:
@@ -241,12 +244,42 @@ static void dump_decl(tree_t t, int indent)
       printf(" )\n");
       tab(indent + 2);
       printf("return %s is\n", type_pp(type_result(tree_type(t))));
+      for (unsigned i = 0; i < tree_decls(t); i++)
+         dump_decl(tree_decl(t, i), indent + 2);
       tab(indent);
       printf("begin\n");
       for (unsigned i = 0; i < tree_stmts(t); i++)
          dump_stmt(tree_stmt(t, i), indent + 2);
       tab(indent);
       printf("end function;\n\n");
+      return;
+
+   case T_PROC_DECL:
+      printf("procedure %s (\n", istr(tree_ident(t)));
+      for (unsigned i = 0; i < tree_ports(t); i++) {
+         if (i > 0)
+            printf(";\n");
+         dump_port(tree_port(t, i), indent + 4);
+      }
+      printf(" );\n");
+      return;
+
+   case T_PROC_BODY:
+      printf("procedure %s (\n", istr(tree_ident(t)));
+      for (unsigned i = 0; i < tree_ports(t); i++) {
+         if (i > 0)
+            printf(";\n");
+         dump_port(tree_port(t, i), indent + 4);
+      }
+      printf(" ) is\n");
+      for (unsigned i = 0; i < tree_decls(t); i++)
+         dump_decl(tree_decl(t, i), indent + 2);
+      tab(indent);
+      printf("begin\n");
+      for (unsigned i = 0; i < tree_stmts(t); i++)
+         dump_stmt(tree_stmt(t, i), indent + 2);
+      tab(indent);
+      printf("end procedure;\n\n");
       return;
 
    default:
