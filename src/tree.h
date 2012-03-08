@@ -281,8 +281,8 @@ void tree_set_reject(tree_t t, tree_t r);
 
 uint32_t tree_index(tree_t t);
 
-void tree_add_attr_str(tree_t t, ident_t name, const char *str);
-const char *tree_attr_str(tree_t t, ident_t name);
+void tree_add_attr_str(tree_t t, ident_t name, ident_t str);
+ident_t tree_attr_str(tree_t t, ident_t name);
 void tree_add_attr_int(tree_t t, ident_t name, int n);
 int tree_attr_int(tree_t t, ident_t name, int def);
 void tree_add_attr_ptr(tree_t t, ident_t name, void *ptr);
@@ -293,6 +293,7 @@ void tree_add_attr_tree(tree_t t, ident_t name, tree_t val);
 // Utility functions
 int64_t assume_int(tree_t t);
 void range_bounds(range_t r, int64_t *low, int64_t *high);
+tree_t call_builtin(const char *name, const char *builtin, type_t type, ...);
 
 typedef void (*tree_visit_fn_t)(tree_t t, void *context);
 unsigned tree_visit(tree_t t, tree_visit_fn_t fn, void *context);

@@ -493,6 +493,9 @@ START_TEST(test_array)
       { 98, "type of index universal integer does not match type" },
       { 102, "named and positional associations cannot be mixed in" },
       { 111, "non-locally static choice must be only choice" },
+      { 119, "type of slice prefix is not an array" },
+      { 120, "range direction of slice does not match prefix" },
+      { 121, "others choice not allowed in this context" },
       { -1, NULL }
    };
    expect_errors(expect);

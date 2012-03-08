@@ -24,7 +24,7 @@
 
 #define MAX_CONTEXTS 16
 #define MAX_ATTRS    16
-#define FILE_FMT_VER 0x1003
+#define FILE_FMT_VER 0x1006
 
 //#define EXTRA_READ_CHECKS
 
@@ -48,10 +48,10 @@ struct attr {
    attr_kind_t kind;
    ident_t     name;
    union {
-      char   *sval;
-      int    ival;
-      void   *pval;
-      tree_t tval;
+      ident_t sval;
+      int     ival;
+      void    *pval;
+      tree_t  tval;
    };
 };
 
@@ -114,26 +114,28 @@ struct tree {
    tree_t value;                   // many
 
    // Serialisation and GC bookkeeping
-   unsigned short generation;
-   uint32_t       index;
+   uint32_t generation;
+   uint32_t index;
 };
 
 struct tree_wr_ctx {
-   FILE          *file;
-   type_wr_ctx_t type_ctx;
-   unsigned      generation;
-   unsigned      n_trees;
-   const char    *file_names[256];
+   FILE           *file;
+   type_wr_ctx_t  type_ctx;
+   ident_wr_ctx_t ident_ctx;
+   unsigned       generation;
+   unsigned       n_trees;
+   const char     *file_names[256];
 };
 
 struct tree_rd_ctx {
-   FILE          *file;
-   type_rd_ctx_t type_ctx;
-   unsigned      n_trees;
-   tree_t        *store;
-   unsigned      store_sz;
-   char          *db_fname;
-   const char    *file_names[256];
+   FILE           *file;
+   type_rd_ctx_t  type_ctx;
+   ident_rd_ctx_t ident_ctx;
+   unsigned       n_trees;
+   tree_t         *store;
+   unsigned       store_sz;
+   char           *db_fname;
+   const char     *file_names[256];
 };
 
 #define IS(t, k) ((t)->kind == (k))
@@ -224,10 +226,11 @@ struct tree_rd_ctx {
 #define TREE_ARRAY_BASE_SZ  16
 
 // Garbage collection
-static tree_t   *all_trees = NULL;
-static size_t   max_trees = 128;   // Grows at runtime
-static size_t   n_trees_alloc = 0;
-static unsigned next_generation = 1;
+static tree_t *all_trees = NULL;
+static size_t max_trees = 128;   // Grows at runtime
+static size_t n_trees_alloc = 0;
+
+unsigned next_generation = 1;
 
 static unsigned tree_visit_aux(tree_t t, tree_visit_fn_t fn, void *context,
                                tree_kind_t kind, unsigned generation,
@@ -307,9 +310,6 @@ void tree_gc(void)
    for (unsigned i = 0; i < n_trees_alloc; i++) {
       tree_t t = all_trees[i];
       if (t->generation < base_gen) {
-         if (HAS_TYPE(t) && t->type != NULL)
-            type_unref(t->type);
-
          if (HAS_PORTS(t) && t->ports.items != NULL)
             free(t->ports.items);
          if (HAS_GENERICS(t) && t->generics.items != NULL)
@@ -326,13 +326,8 @@ void tree_gc(void)
          if (HAS_CONTEXT(t) && t->context != NULL)
             free(t->context);
 
-         if (t->attrs != NULL) {
-            for (unsigned i = 0; i < t->n_attrs; i++) {
-               if (t->attrs[i].kind == A_STRING)
-                  free(t->attrs[i].sval);
-            }
+         if (t->attrs != NULL)
             free(t->attrs);
-         }
 
          free(t);
 
@@ -347,10 +342,13 @@ void tree_gc(void)
          all_trees[p++] = all_trees[i];
    }
 
-   printf("[gc: freed %zu trees; %zu allocated]\n",
-          n_trees_alloc - p, p);
+   if (getenv("NVC_GC_VERBOSE") != NULL)
+      printf("[gc: freed %zu trees; %zu allocated]\n",
+             n_trees_alloc - p, p);
 
    n_trees_alloc = p;
+
+   type_sweep(base_gen);
 }
 
 const loc_t *tree_loc(tree_t t)
@@ -507,9 +505,6 @@ void tree_set_type(tree_t t, type_t ty)
    assert(t != NULL);
    assert(HAS_TYPE(t));
 
-   type_ref(ty);
-   if (t->type)
-      type_unref(t->type);
    t->type = ty;
 }
 
@@ -1148,6 +1143,9 @@ static unsigned tree_visit_type(type_t type,
    if (type == NULL)
       return 0;
 
+   if (!type_update_generation(type, generation))
+      return 0;
+
    unsigned n = 0;
 
    switch (type_kind(type)) {
@@ -1443,7 +1441,7 @@ static void write_p(struct param_array *a, tree_wr_ctx_t ctx)
          tree_write(a->items[i].range.right, ctx);
          break;
       case P_NAMED:
-         ident_write(a->items[i].name, ctx->file);
+         ident_write(a->items[i].name, ctx->ident_ctx);
          tree_write(a->items[i].value, ctx);
          break;
       }
@@ -1467,7 +1465,7 @@ static void read_p(struct param_array *a, tree_rd_ctx_t ctx)
          a->items[i].range.right = tree_read(ctx);
          break;
       case P_NAMED:
-         a->items[i].name  = ident_read(ctx->file);
+         a->items[i].name  = ident_read(ctx->ident_ctx);
          a->items[i].value = tree_read(ctx);
          break;
       }
@@ -1476,20 +1474,22 @@ static void read_p(struct param_array *a, tree_rd_ctx_t ctx)
 
 tree_wr_ctx_t tree_write_begin(FILE *f)
 {
+   write_u16(FILE_FMT_VER, f);
+
    struct tree_wr_ctx *ctx = xmalloc(sizeof(struct tree_wr_ctx));
    ctx->file       = f;
    ctx->generation = next_generation++;
    ctx->n_trees    = 0;
-   ctx->type_ctx   = type_write_begin(ctx);
+   ctx->ident_ctx  = ident_write_begin(f);
+   ctx->type_ctx   = type_write_begin(ctx, ctx->ident_ctx);
    memset(ctx->file_names, '\0', sizeof(ctx->file_names));
-
-   write_u16(FILE_FMT_VER, f);
 
    return ctx;
 }
 
 void tree_write_end(tree_wr_ctx_t ctx)
 {
+   ident_write_end(ctx->ident_ctx);
    type_write_end(ctx->type_ctx);
    free(ctx);
 }
@@ -1519,9 +1519,9 @@ void tree_write(tree_t t, tree_wr_ctx_t ctx)
    write_u16(t->kind, ctx->file);
    write_loc(&t->loc, ctx);
    if (HAS_IDENT(t))
-      ident_write(t->ident, ctx->file);
+      ident_write(t->ident, ctx->ident_ctx);
    if (HAS_IDENT2(t))
-      ident_write(t->ident2, ctx->file);
+      ident_write(t->ident2, ctx->ident_ctx);
    if (HAS_PORTS(t))
       write_a(&t->ports, ctx);
    if (HAS_GENERICS(t))
@@ -1551,7 +1551,7 @@ void tree_write(tree_t t, tree_wr_ctx_t ctx)
    if (HAS_CONTEXT(t)) {
       write_u16(t->n_contexts, ctx->file);
       for (unsigned i = 0; i < t->n_contexts; i++) {
-         ident_write(t->context[i].name, ctx->file);
+         ident_write(t->context[i].name, ctx->ident_ctx);
          write_loc(&t->context[i].loc, ctx);
       }
    }
@@ -1633,12 +1633,11 @@ void tree_write(tree_t t, tree_wr_ctx_t ctx)
    write_u16(t->n_attrs, ctx->file);
    for (unsigned i = 0; i < t->n_attrs; i++) {
       write_u16(t->attrs[i].kind, ctx->file);
-      ident_write(t->attrs[i].name, ctx->file);
+      ident_write(t->attrs[i].name, ctx->ident_ctx);
 
       switch (t->attrs[i].kind) {
       case A_STRING:
-         write_u16(strlen(t->attrs[i].sval), ctx->file);
-         fputs(t->attrs[i].sval, ctx->file);
+         ident_write(t->attrs[i].sval, ctx->ident_ctx);
          break;
 
       case A_INT:
@@ -1687,9 +1686,9 @@ tree_t tree_read(tree_rd_ctx_t ctx)
    ctx->store[t->index] = t;
 
    if (HAS_IDENT(t))
-      tree_set_ident(t, ident_read(ctx->file));
+      tree_set_ident(t, ident_read(ctx->ident_ctx));
    if (HAS_IDENT2(t))
-      tree_set_ident2(t, ident_read(ctx->file));
+      tree_set_ident2(t, ident_read(ctx->ident_ctx));
    if (HAS_PORTS(t))
       read_a(&t->ports, ctx);
    if (HAS_GENERICS(t))
@@ -1704,10 +1703,8 @@ tree_t tree_read(tree_rd_ctx_t ctx)
       read_a(&t->waves, ctx);
    if (HAS_CONDS(t))
       read_a(&t->conds, ctx);
-   if (HAS_TYPE(t)) {
-      if ((t->type = type_read(ctx->type_ctx)))
-         type_ref(t->type);
-   }
+   if (HAS_TYPE(t))
+      t->type = type_read(ctx->type_ctx);
    if (HAS_VALUE(t))
       t->value = tree_read(ctx);
    if (HAS_DELAY(t))
@@ -1723,7 +1720,7 @@ tree_t tree_read(tree_rd_ctx_t ctx)
       t->context    = xmalloc(sizeof(context_t) * MAX_CONTEXTS);
 
       for (unsigned i = 0; i < t->n_contexts; i++) {
-         t->context[i].name = ident_read(ctx->file);
+         t->context[i].name = ident_read(ctx->ident_ctx);
          t->context[i].loc  = read_loc(ctx);
       }
    }
@@ -1809,17 +1806,11 @@ tree_t tree_read(tree_rd_ctx_t ctx)
 
    for (unsigned i = 0; i < t->n_attrs; i++) {
       t->attrs[i].kind = read_u16(ctx->file);
-      t->attrs[i].name = ident_read(ctx->file);
+      t->attrs[i].name = ident_read(ctx->ident_ctx);
 
       switch (t->attrs[i].kind) {
       case A_STRING:
-         {
-            size_t len = read_u16(ctx->file);
-            t->attrs[i].sval = xmalloc(len + 1);
-            if (fread(t->attrs[i].sval, len, 1, ctx->file) != 1)
-               fatal("premature end of file");
-            t->attrs[i].sval[len] = '\0';
-         }
+         t->attrs[i].sval = ident_read(ctx->ident_ctx);
          break;
 
       case A_INT:
@@ -1847,27 +1838,29 @@ tree_t tree_read(tree_rd_ctx_t ctx)
 
 tree_rd_ctx_t tree_read_begin(FILE *f, const char *fname)
 {
-   struct tree_rd_ctx *ctx = xmalloc(sizeof(struct tree_rd_ctx));
-   ctx->file     = f;
-   ctx->type_ctx = type_read_begin(ctx);
-   ctx->store_sz = 128;
-   ctx->store    = xmalloc(ctx->store_sz * sizeof(tree_t));
-   ctx->n_trees  = 0;
-   ctx->db_fname = strdup(fname);
-   memset(ctx->file_names, '\0', sizeof(ctx->file_names));
-
    uint16_t ver = read_u16(f);
    if (ver != FILE_FMT_VER)
       fatal("%s: serialised version %x expected %x",
-            ctx->db_fname, ver, FILE_FMT_VER);
+            fname, ver, FILE_FMT_VER);
+
+   struct tree_rd_ctx *ctx = xmalloc(sizeof(struct tree_rd_ctx));
+   ctx->file      = f;
+   ctx->ident_ctx = ident_read_begin(f);
+   ctx->type_ctx  = type_read_begin(ctx, ctx->ident_ctx);
+   ctx->store_sz  = 128;
+   ctx->store     = xmalloc(ctx->store_sz * sizeof(tree_t));
+   ctx->n_trees   = 0;
+   ctx->db_fname  = strdup(fname);
+   memset(ctx->file_names, '\0', sizeof(ctx->file_names));
 
    return ctx;
 }
 
 void tree_read_end(tree_rd_ctx_t ctx)
 {
-   fclose(ctx->file);
+   ident_read_end(ctx->ident_ctx);
    type_read_end(ctx->type_ctx);
+   fclose(ctx->file);
    free(ctx->store);
    free(ctx->db_fname);
    free(ctx);
@@ -1915,12 +1908,12 @@ static struct attr *tree_add_attr(tree_t t, ident_t name, attr_kind_t kind)
    return &t->attrs[i];
 }
 
-void tree_add_attr_str(tree_t t, ident_t name, const char *str)
+void tree_add_attr_str(tree_t t, ident_t name, ident_t str)
 {
-   tree_add_attr(t, name, A_STRING)->sval = strdup(str);
+   tree_add_attr(t, name, A_STRING)->sval = str;
 }
 
-const char *tree_attr_str(tree_t t, ident_t name)
+ident_t tree_attr_str(tree_t t, ident_t name)
 {
    struct attr *a = tree_find_attr(t, name, A_STRING);
    return a ? a->sval : NULL;
@@ -2253,10 +2246,8 @@ static tree_t tree_copy_aux(tree_t t, struct tree_copy_ctx *ctx)
       copy_a(&t->stmts, &copy->stmts, ctx);
    if (HAS_WAVEFORMS(t))
       copy_a(&t->waves, &copy->waves, ctx);
-   if (HAS_TYPE(t)) {
-      if ((copy->type = t->type))
-         type_ref(copy->type);
-   }
+   if (HAS_TYPE(t))
+      copy->type = t->type;
    if (HAS_VALUE(t))
       copy->value = tree_copy_aux(t->value, ctx);
    if (HAS_REJECT(t))
@@ -2363,4 +2354,57 @@ tree_t tree_copy(tree_t t)
    tree_t copy = tree_copy_aux(t, &ctx);
    free(ctx.copied);
    return copy;
+}
+
+tree_t call_builtin(const char *name, const char *builtin, type_t type, ...)
+{
+   struct decl_cache {
+      struct decl_cache *next;
+      ident_t bname;
+      tree_t  decl;
+   };
+
+   static struct decl_cache *cache = NULL;
+
+   ident_t bname = ident_new(builtin);
+   ident_t name_i = ident_new(name);
+
+   struct decl_cache *it;
+   tree_t decl = NULL;
+   for (it = cache; it != NULL; it = it->next) {
+      if (it->bname == bname) {
+         decl = it->decl;
+         break;
+      }
+   }
+
+   if (decl == NULL) {
+      decl = tree_new(T_FUNC_DECL);
+      tree_set_ident(decl, name_i);
+      tree_add_attr_str(decl, ident_new("builtin"), ident_new(builtin));
+   }
+
+   struct decl_cache *c = xmalloc(sizeof(struct decl_cache));
+   c->next  = cache;
+   c->bname = bname;
+   c->decl  = decl;
+
+   cache = c;
+
+   tree_t call = tree_new(T_FCALL);
+   tree_set_ident(call, name_i);
+   tree_set_ref(call, decl);
+   if (type != NULL)
+      tree_set_type(call, type);
+
+   va_list ap;
+   va_start(ap, type);
+   tree_t arg;
+   while ((arg = va_arg(ap, tree_t))) {
+      param_t p = { .kind = P_POS, .value = arg };
+      tree_add_param(call, p);
+   }
+   va_end(ap);
+
+   return call;
 }

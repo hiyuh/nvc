@@ -60,25 +60,24 @@ struct type {
       };
    };
 
-   // Reference counting
-   unsigned short refcount;
-
    // Serialisation accounting
-   unsigned short generation;
-   unsigned       index;
+   uint32_t generation;
+   uint32_t index;
 };
 
 struct type_wr_ctx {
-   tree_wr_ctx_t tree_ctx;
-   unsigned      generation;
-   unsigned      n_types;
+   tree_wr_ctx_t  tree_ctx;
+   ident_wr_ctx_t ident_ctx;
+   unsigned       generation;
+   unsigned       n_types;
 };
 
 struct type_rd_ctx {
-   tree_rd_ctx_t tree_ctx;
-   unsigned      n_types;
-   type_t        *store;
-   unsigned      store_sz;
+   tree_rd_ctx_t  tree_ctx;
+   ident_rd_ctx_t ident_ctx;
+   unsigned       n_types;
+   type_t         *store;
+   unsigned       store_sz;
 };
 
 #define IS(t, k) ((t)->kind == (k))
@@ -91,11 +90,24 @@ struct type_rd_ctx {
    (IS(t, T_SUBTYPE) || IS(t, T_UNRESOLVED))
 #define HAS_PARAMS(t) (IS(t, T_FUNC) || IS(t, T_PROC))
 
+// Garbage collection
+static type_t *all_types = NULL;
+static size_t max_types = 128;   // Grows at runtime
+static size_t n_types_alloc = 0;
+
 type_t type_new(type_kind_t kind)
 {
    struct type *t = xmalloc(sizeof(struct type));
    memset(t, '\0', sizeof(struct type));
    t->kind = kind;
+
+   if (all_types == NULL)
+      all_types = xmalloc(sizeof(tree_t) * max_types);
+   else if (n_types_alloc == max_types) {
+      max_types *= 2;
+      all_types = xrealloc(all_types, sizeof(tree_t) * max_types);
+   }
+   all_types[n_types_alloc++] = t;
 
    return t;
 }
@@ -250,7 +262,6 @@ void type_set_base(type_t t, type_t b)
    assert(HAS_BASE(t));
    assert(b != NULL);
 
-   type_ref(b);
    t->base = b;
 }
 
@@ -265,17 +276,17 @@ type_t type_universal_int(void)
       tree_t left = tree_new(T_LITERAL);
       literal_t l_min = { { .i = INT_MIN }, .kind = L_INT };
       tree_set_literal(left, l_min);
+      tree_set_type(left, t);
 
       tree_t right = tree_new(T_LITERAL);
       literal_t l_max = { { .i = INT_MAX }, .kind = L_INT };
       tree_set_literal(right, l_max);
+      tree_set_type(right, t);
 
       range_t r = { .kind  = RANGE_TO,
                     .left  = left,
                     .right = right };
       type_add_dim(t, r);
-
-      type_ref(t);
    }
 
    return t;
@@ -387,7 +398,6 @@ void type_add_param(type_t t, type_t p)
       t->params = xrealloc(t->params, t->params_alloc * sizeof(type_t));
    }
 
-   type_ref(p);
    t->params[t->n_params++] = p;
 }
 
@@ -405,9 +415,6 @@ void type_set_result(type_t t, type_t r)
    assert(t != NULL);
    assert(IS(t, T_FUNC));
 
-   type_ref(r);
-   if (t->result)
-      type_unref(t->result);
    t->result = r;
 }
 
@@ -467,7 +474,6 @@ void type_add_index_constr(type_t t, type_t c)
    assert(type_kind(t) == T_UARRAY);
    assert(t->n_index_constr < MAX_DIMS);
 
-   type_ref(c);
    t->index_constr[t->n_index_constr++] = c;
 }
 
@@ -478,8 +484,6 @@ void type_change_index_constr(type_t t, unsigned n, type_t c)
    assert(type_kind(t) == T_UARRAY);
    assert(n < t->n_index_constr);
 
-   type_ref(c);
-   type_unref(t->index_constr[n]);
    t->index_constr[n] = c;
 }
 
@@ -516,38 +520,6 @@ tree_t type_resolution(type_t t)
    return t->resolution;
 }
 
-void type_unref(type_t t)
-{
-   assert(t != NULL);
-   assert(t->refcount > 0);
-
-   if (--(t->refcount) == 0) {
-      if (HAS_PARAMS(t)) {
-         for (unsigned i = 0; i < t->n_params; i++)
-            type_unref(t->params[i]);
-         free(t->params);
-      }
-
-      if (IS(t, T_PHYSICAL) && t->units != NULL)
-         free(t->units);
-      else if (IS(t, T_ENUM) && t->literals != NULL)
-         free(t->literals);
-      else if (IS(t, T_FUNC))
-         type_unref(t->result);
-      if (HAS_DIMS(t) && t->dims != NULL)
-         free(t->dims);
-
-      free(t);
-   }
-}
-
-void type_ref(type_t t)
-{
-   assert(t != NULL);
-
-   (t->refcount)++;
-}
-
 void type_write(type_t t, type_wr_ctx_t ctx)
 {
    FILE *f = tree_write_file(ctx->tree_ctx);
@@ -556,8 +528,6 @@ void type_write(type_t t, type_wr_ctx_t ctx)
       write_u16(0xffff, f);   // Null marker
       return;
    }
-
-   assert(t->refcount > 0);
 
    if (t->generation == ctx->generation) {
       // Already visited this type
@@ -570,7 +540,7 @@ void type_write(type_t t, type_wr_ctx_t ctx)
    t->index      = (ctx->n_types)++;
 
    write_u16(t->kind, f);
-   ident_write(t->ident, f);
+   ident_write(t->ident, ctx->ident_ctx);
    if (HAS_DIMS(t)) {
       write_u16(t->n_dims, f);
       for (unsigned i = 0; i < t->n_dims; i++) {
@@ -595,7 +565,7 @@ void type_write(type_t t, type_wr_ctx_t ctx)
       write_u16(t->n_units, f);
       for (unsigned i = 0; i < t->n_units; i++) {
          tree_write(t->units[i].multiplier, ctx->tree_ctx);
-         ident_write(t->units[i].name, f);
+         ident_write(t->units[i].name, ctx->ident_ctx);
       }
    }
    else if (IS(t, T_ENUM)) {
@@ -629,7 +599,7 @@ type_t type_read(type_rd_ctx_t ctx)
    assert(marker < T_LAST_TYPE_KIND);
 
    type_t t = type_new((type_kind_t)marker);
-   t->ident = ident_read(f);
+   t->ident = ident_read(ctx->ident_ctx);
 
    // Stash pointer for later back references
    // This must be done early as a child node of this type may
@@ -653,10 +623,8 @@ type_t type_read(type_rd_ctx_t ctx)
       t->n_dims = ndims;
    }
    if (HAS_BASE(t)) {
-      if (read_b(f)) {
-         if ((t->base = type_read(ctx)))
-            type_ref(t->base);
-      }
+      if (read_b(f))
+         t->base = type_read(ctx);
    }
    if (HAS_RESOLUTION(t))
       t->resolution = tree_read(ctx->tree_ctx);
@@ -666,10 +634,8 @@ type_t type_read(type_rd_ctx_t ctx)
       t->params = xmalloc(nparams * sizeof(type_t));
       t->params_alloc = nparams;
 
-      for (unsigned i = 0; i < nparams; i++) {
-         if ((t->params[i] = type_read(ctx)))
-            type_ref(t->params[i]);
-      }
+      for (unsigned i = 0; i < nparams; i++)
+         t->params[i] = type_read(ctx);
       t->n_params = nparams;
    }
 
@@ -681,7 +647,7 @@ type_t type_read(type_rd_ctx_t ctx)
 
       for (unsigned i = 0; i < nunits; i++) {
          t->units[i].multiplier = tree_read(ctx->tree_ctx);
-         t->units[i].name = ident_read(f);
+         t->units[i].name = ident_read(ctx->ident_ctx);
       }
       t->n_units = nunits;
    }
@@ -696,28 +662,27 @@ type_t type_read(type_rd_ctx_t ctx)
       }
       t->n_literals = nlits;
    }
-   else if (IS(t, T_FUNC)) {
-      if ((t->result = type_read(ctx)))
-         type_ref(t->result);
-   }
+   else if (IS(t, T_FUNC))
+      t->result = type_read(ctx);
    else if (IS(t, T_UARRAY)) {
       unsigned short nconstr = read_u16(f);
       assert(nconstr < MAX_DIMS);
 
       for (unsigned i = 0; i < nconstr; i++)
-         type_ref((t->index_constr[i] = type_read(ctx)));
+         t->index_constr[i] = type_read(ctx);
       t->n_index_constr = nconstr;
    }
 
    return t;
 }
 
-type_wr_ctx_t type_write_begin(tree_wr_ctx_t tree_ctx)
+type_wr_ctx_t type_write_begin(tree_wr_ctx_t tree_ctx, ident_wr_ctx_t ident_ctx)
 {
-   static unsigned next_generation = 1;
+   extern unsigned next_generation;
 
    struct type_wr_ctx *ctx = xmalloc(sizeof(struct type_wr_ctx));
    ctx->tree_ctx   = tree_ctx;
+   ctx->ident_ctx  = ident_ctx;
    ctx->generation = next_generation++;
    ctx->n_types    = 0;
 
@@ -729,13 +694,14 @@ void type_write_end(type_wr_ctx_t ctx)
    free(ctx);
 }
 
-type_rd_ctx_t type_read_begin(tree_rd_ctx_t tree_ctx)
+type_rd_ctx_t type_read_begin(tree_rd_ctx_t tree_ctx, ident_rd_ctx_t ident_ctx)
 {
    struct type_rd_ctx *ctx = xmalloc(sizeof(struct type_rd_ctx));
-   ctx->tree_ctx = tree_ctx;
-   ctx->store_sz = 32;
-   ctx->store    = xmalloc(ctx->store_sz * sizeof(type_t));
-   ctx->n_types  = 0;
+   ctx->tree_ctx  = tree_ctx;
+   ctx->ident_ctx = ident_ctx;
+   ctx->store_sz  = 32;
+   ctx->store     = xmalloc(ctx->store_sz * sizeof(type_t));
+   ctx->n_types   = 0;
 
    return ctx;
 }
@@ -772,4 +738,49 @@ const char *type_pp(type_t t)
    default:
       return istr(type_ident(t));
    }
+}
+
+bool type_update_generation(type_t t, unsigned generation)
+{
+   if (t->generation == generation)
+      return false;
+   else {
+      t->generation = generation;
+      return true;
+   }
+}
+
+void type_sweep(unsigned generation)
+{
+   for (unsigned i = 0; i < n_types_alloc; i++) {
+      type_t t = all_types[i];
+      if (t->generation < generation) {
+         if (IS(t, T_PHYSICAL) && t->units != NULL)
+            free(t->units);
+         else if (IS(t, T_ENUM) && t->literals != NULL)
+            free(t->literals);
+
+         if (HAS_PARAMS(t) && t->params != NULL)
+            free(t->params);
+         if (HAS_DIMS(t) && t->dims != NULL)
+            free(t->dims);
+
+         free(t);
+
+         all_types[i] = NULL;
+      }
+   }
+
+   // Compact
+   size_t p = 0;
+   for (unsigned i = 0; i < n_types_alloc; i++) {
+      if (all_types[i] != NULL)
+         all_types[p++] = all_types[i];
+   }
+
+   if (getenv("NVC_GC_VERBOSE") != NULL)
+      printf("[gc: freed %zu types; %zu allocated]\n",
+             n_types_alloc - p, p);
+
+   n_types_alloc = p;
 }

@@ -67,6 +67,8 @@ static struct scope    *top_scope = NULL;
 static int             errors = 0;
 static struct type_set *top_type_set = NULL;
 static bool            bootstrap = false;
+static ident_t         builtin_i;
+static ident_t         std_standard_i;
 
 #define sem_error(t, ...) {                           \
       error_at(t ? tree_loc(t) : NULL , __VA_ARGS__); \
@@ -199,7 +201,6 @@ static bool scope_hides(tree_t a, tree_t b)
 {
    // True if declaration of b hides a
    if (type_eq(tree_type(a), tree_type(b))) {
-      ident_t builtin_i = ident_new("builtin");
       return (tree_attr_str(a, builtin_i) != NULL)
          && (tree_attr_str(b, builtin_i) == NULL);
    }
@@ -415,7 +416,7 @@ static bool type_set_member(type_t t)
 static type_t sem_std_type(const char *name)
 {
    ident_t name_i = ident_new(name);
-   ident_t qual = ident_prefix(ident_new("STD.STANDARD"), name_i, '.');
+   ident_t qual = ident_prefix(std_standard_i, name_i, '.');
    tree_t decl = scope_find(qual);
    if (decl == NULL)
       fatal("cannot find %s type", istr(qual));
@@ -462,7 +463,7 @@ static tree_t sem_builtin_fn(ident_t name, type_t result,
    tree_t d = tree_new(T_FUNC_DECL);
    tree_set_ident(d, name);
    tree_set_type(d, f);
-   tree_add_attr_str(d, ident_new("builtin"), builtin);
+   tree_add_attr_str(d, builtin_i, ident_new(builtin));
 
    return d;
 }
@@ -501,33 +502,6 @@ static tree_t sem_int_lit(type_t type, int64_t i)
    tree_set_type(f, type);
 
    return f;
-}
-
-static tree_t sem_call_builtin(const char *name, const char *builtin,
-                               type_t type, ...)
-{
-   ident_t name_i = ident_new(name);
-
-   // TODO: it's a waste to create a separate decl for each call
-   tree_t decl = tree_new(T_FUNC_DECL);
-   tree_set_ident(decl, name_i);
-   tree_add_attr_str(decl, ident_new("builtin"), builtin);
-
-   tree_t call = tree_new(T_FCALL);
-   tree_set_ident(call, name_i);
-   tree_set_ref(call, decl);
-   tree_set_type(call, type);
-
-   va_list ap;
-   va_start(ap, type);
-   tree_t arg;
-   while ((arg = va_arg(ap, tree_t))) {
-      param_t p = { .kind = P_POS, .value = arg };
-      tree_add_param(call, p);
-   }
-   va_end(ap);
-
-   return call;
 }
 
 static void sem_declare_predefined_ops(tree_t decl)
@@ -920,7 +894,7 @@ static bool sem_check_context(tree_t t)
          fatal("failed to find std library");
 
       context_t c = {
-         .name = ident_new("STD.STANDARD"),
+         .name = std_standard_i,
          .loc  = LOC_INVALID
       };
       if (!scope_import_unit(c, std, true))
@@ -1249,6 +1223,40 @@ static void sem_add_attributes(tree_t decl)
    }
 }
 
+static tree_t sem_default_value(type_t type)
+{
+   type_t base;
+   (void)sem_check_subtype(NULL, type, &base);
+
+   switch (type_kind(base)) {
+   case T_CARRAY:
+      {
+         tree_t def = NULL;
+         for (int i = type_dims(type) - 1 ; i >= 0; i--) {
+            tree_t val = (def ? def : sem_default_value(type_base(type)));
+            def = tree_new(T_AGGREGATE);
+            assoc_t a = {
+               .kind = A_OTHERS,
+               .value = val
+            };
+            tree_add_assoc(def, a);
+         }
+         return def;
+      }
+
+   case T_INTEGER:
+   case T_PHYSICAL:
+   case T_REAL:
+      return type_dim(type, 0).left;
+
+   case T_ENUM:
+      return sem_make_ref(type_enum_literal(base, 0));
+
+   default:
+      assert(false);
+   }
+}
+
 static bool sem_check_decl(tree_t t)
 {
    type_t type = tree_type(t);
@@ -1256,6 +1264,9 @@ static bool sem_check_decl(tree_t t)
       return false;
 
    tree_set_type(t, type);
+
+   if (!tree_has_value(t) && (tree_kind(t) != T_PORT_DECL))
+      tree_set_value(t, sem_default_value(type));
 
    if (tree_has_value(t)) {
       tree_t value = tree_value(t);
@@ -1348,7 +1359,7 @@ static bool sem_check_duplicate(tree_t t, tree_kind_t kind)
 
          if (type_eq(tree_type(t), tree_type(decl))) {
             // Allow builtin functions to be hidden
-            if (tree_attr_str(decl, ident_new("builtin")) == NULL)
+            if (tree_attr_str(decl, builtin_i) == NULL)
                break;
          }
       }
@@ -1728,6 +1739,9 @@ static bool sem_check_var_assign(tree_t t)
 
    tree_t decl = tree_ref(target);
 
+   while (tree_kind(decl) == T_ALIAS)
+      decl = tree_ref(tree_value(decl));
+
    bool suitable = (tree_kind(decl) == T_VAR_DECL)
       || (tree_kind(decl) == T_PORT_DECL && tree_class(decl) == C_VARIABLE);
 
@@ -2028,7 +2042,7 @@ static bool sem_resolve_overload(tree_t t, tree_t *pick, int *matches,
 
       if (match) {
          (*matches)++;
-         bool builtin = tree_attr_str(overloads[n], ident_new("builtin"));
+         bool builtin = tree_attr_str(overloads[n], builtin_i);
          if (all_universal && builtin) {
             // If all the arguments are universal integer or real and
             // this is a builtin function then it doesn't matter which
@@ -2272,8 +2286,7 @@ static bool sem_check_wait(tree_t t)
       tree_t delay = tree_delay(t);
       sem_check(delay);
 
-      ident_t time_name = ident_new("STD.STANDARD.TIME");
-      if (type_ident(tree_type(delay)) != time_name)
+      if (!icmp(type_ident(tree_type(delay)), "STD.STANDARD.TIME"))
          sem_error(delay, "type of delay must be TIME");
    }
 
@@ -2328,13 +2341,13 @@ static tree_t sem_array_len(type_t type)
 
    tree_t tmp;
    if (r.kind == RANGE_TO)
-      tmp = sem_call_builtin("\"-\"", "sub", index_type,
-                             r.right, r.left, NULL);
+      tmp = call_builtin("\"-\"", "sub", index_type,
+                         r.right, r.left, NULL);
    else
-      tmp = sem_call_builtin("\"-\"", "sub", index_type,
-                             r.left, r.right, NULL);
+      tmp = call_builtin("\"-\"", "sub", index_type,
+                         r.left, r.right, NULL);
 
-   return sem_call_builtin("\"+\"", "add", index_type, tmp, one, NULL);
+   return call_builtin("\"+\"", "add", index_type, tmp, one, NULL);
 }
 
 static bool sem_check_concat_param(tree_t t, type_t expect)
@@ -2435,12 +2448,12 @@ static bool sem_check_concat(tree_t t)
       if (lkind == T_CARRAY)
          left_len = sem_array_len(ltype);
       else
-         left_len = sem_call_builtin("length", "length", std_int, left, NULL);
+         left_len = call_builtin("length", "length", std_int, left, NULL);
 
       if (rkind == T_CARRAY)
          right_len = sem_array_len(rtype);
       else
-         right_len = sem_call_builtin("length", "length", std_int, right, NULL);
+         right_len = call_builtin("length", "length", std_int, right, NULL);
 
       type_t result = type_new(T_CARRAY);
       type_set_ident(result, type_ident(ltype));
@@ -2448,11 +2461,11 @@ static bool sem_check_concat(tree_t t)
 
       tree_t one = sem_int_lit(index_type, 1);
 
-      tree_t result_len = sem_call_builtin(
+      tree_t result_len = call_builtin(
          "\"+\"", "add", index_type, left_len, right_len, NULL);
-      tree_t tmp = sem_call_builtin(
+      tree_t tmp = call_builtin(
          "\"-\"", "sub", index_type, result_len, index_r.left, NULL);
-      tree_t result_right = sem_call_builtin(
+      tree_t result_right = call_builtin(
          "\"-\"", "sub", index_type, tmp, one, NULL);
 
       range_t result_r = {
@@ -2537,6 +2550,8 @@ static bool sem_check_aggregate(tree_t t)
          if (state == OTHERS)
             sem_error(a.value, "only a single others association "
                       "allowed in aggregate");
+         if (type_kind(composite_type) == T_UARRAY)
+            sem_error(a.value, "others choice not allowed in this context");
          state = OTHERS;
          break;
       }
@@ -2565,10 +2580,10 @@ static bool sem_check_aggregate(tree_t t)
       range_t index_r = type_dim(index_type, 0);
 
       if (have_named) {
-         tree_t low = sem_call_builtin("NVC.BUILTIN.AGG_LOW", "agg_low",
-                                       index_type, t, NULL);
-         tree_t high = sem_call_builtin("NVC.BUILTIN.AGG_HIGH", "agg_high",
-                                        index_type, t, NULL);
+         tree_t low = call_builtin("NVC.BUILTIN.AGG_LOW", "agg_low",
+                                   index_type, t, NULL);
+         tree_t high = call_builtin("NVC.BUILTIN.AGG_HIGH", "agg_high",
+                                    index_type, t, NULL);
 
          range_t r = {
             .kind  = index_r.kind,
@@ -2583,8 +2598,8 @@ static bool sem_check_aggregate(tree_t t)
          range_t r = {
             .kind  = index_r.kind,
             .left  = index_r.left,
-            .right = sem_call_builtin("\"+\"", "add", index_type, n_elems,
-                                      index_r.left, NULL)
+            .right = call_builtin("\"+\"", "add", index_type, n_elems,
+                                  index_r.left, NULL)
          };
          type_add_dim(tmp, r);
       }
@@ -2758,6 +2773,10 @@ static bool sem_check_array_slice(tree_t t)
       return false;
 
    type_t array_type = tree_type(tree_value(t));
+   type_kind_t array_k = type_kind(array_type);
+
+   if (array_k != T_CARRAY && array_k != T_UARRAY)
+      sem_error(t, "type of slice prefix is not an array");
 
    type_set_push();
    type_set_add(sem_std_type("INTEGER"));
@@ -2768,6 +2787,9 @@ static bool sem_check_array_slice(tree_t t)
 
    if (!ok)
       return false;
+
+   if (array_k == T_CARRAY && (r.kind != type_dim(array_type, 0).kind))
+      sem_error(t, "range direction of slice does not match prefix");
 
    type_t slice_type = type_new(T_CARRAY);
    type_set_ident(slice_type, type_ident(array_type));
@@ -2786,7 +2808,7 @@ static bool sem_check_attr_ref(tree_t t)
    if (decl == NULL)
       sem_error(t, "undefined identifier %s", istr(tree_ident(t)));
 
-   if (tree_ident2(t) == ident_new("range"))
+   if (icmp(tree_ident2(t), "range"))
       sem_error(t, "range expression not allowed here");
 
    tree_t a = tree_attr_tree(decl, tree_ident2(t));
@@ -3125,8 +3147,23 @@ static bool sem_check_exit(tree_t t)
    return true;
 }
 
+
+static void sem_intern_strings(void)
+{
+   // Intern some commonly used strings
+
+   builtin_i      = ident_new("builtin");
+   std_standard_i = ident_new("STD.STANDARD");
+}
+
 bool sem_check(tree_t t)
 {
+   static bool have_interned = false;
+   if (!have_interned) {
+      sem_intern_strings();
+      have_interned = true;
+   }
+
    switch (tree_kind(t)) {
    case T_ARCH:
       return sem_check_arch(t);

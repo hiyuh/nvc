@@ -408,3 +408,9 @@ Try ieee1 regression again, and w/ valgrind:
  ==15534==
  ==15534== For counts of detected and suppressed errors, rerun with: -v
  ==15534== ERROR SUMMARY: 1 errors from 1 contexts (suppressed: 7 from 5)
+
+Note, I filed a bug and still am investigating:
+
+https://bugs.gentoo.org/show_bug.cgi?id=403519
+
+Maybe, LLVM is broken on Gentoo/PowerPC?

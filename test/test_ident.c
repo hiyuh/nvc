@@ -71,16 +71,24 @@ START_TEST(test_read_write)
    FILE *f = tmpfile();
    fail_if(f == NULL);
 
-   ident_write(i1, f);
-   ident_write(i2, f);
-   ident_write(i3, f);
+   ident_wr_ctx_t wctx = ident_write_begin(f);
+
+   ident_write(i1, wctx);
+   ident_write(i2, wctx);
+   ident_write(i3, wctx);
+
+   ident_write_end(wctx);
 
    rewind(f);
 
+   ident_rd_ctx_t rctx = ident_read_begin(f);
+
    ident_t j1, j2, j3;
-   j1 = ident_read(f);
-   j2 = ident_read(f);
-   j3 = ident_read(f);
+   j1 = ident_read(rctx);
+   j2 = ident_read(rctx);
+   j3 = ident_read(rctx);
+
+   ident_read_end(rctx);
 
    fail_unless(i1 == j1);
    fail_unless(i2 == j2);
@@ -153,6 +161,21 @@ START_TEST(test_until)
 }
 END_TEST
 
+START_TEST(test_icmp)
+{
+   ident_t i, j;
+
+   i = ident_new("foobar");
+   j = ident_new("cake");
+
+   fail_unless(icmp(i, "foobar"));
+   fail_unless(icmp(j, "cake"));
+   fail_if(icmp(i, "cake"));
+   fail_if(icmp(i, "fooba"));
+   fail_if(icmp(j, "cakesniffer"));
+}
+END_TEST;
+
 int main(void)
 {
    srandom((unsigned)time(NULL));
@@ -169,6 +192,7 @@ int main(void)
    tcase_add_test(tc_core, test_strip);
    tcase_add_test(tc_core, test_char);
    tcase_add_test(tc_core, test_until);
+   tcase_add_test(tc_core, test_icmp);
    suite_add_tcase(s, tc_core);
 
    SRunner *sr = srunner_create(s);

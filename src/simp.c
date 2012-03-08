@@ -122,68 +122,68 @@ static tree_t get_bool_lit(tree_t t, bool v)
    return b;
 }
 
-static tree_t simp_fcall_log(tree_t t, const char *builtin, bool *args)
+static tree_t simp_fcall_log(tree_t t, ident_t builtin, bool *args)
 {
-   if (strcmp(builtin, "not") == 0)
+   if (icmp(builtin, "not"))
       return get_bool_lit(t, !args[0]);
-   else if (strcmp(builtin, "and") == 0)
+   else if (icmp(builtin, "and"))
       return get_bool_lit(t, args[0] && args[1]);
-   else if (strcmp(builtin, "nand") == 0)
+   else if (icmp(builtin, "nand"))
       return get_bool_lit(t, !(args[0] && args[1]));
-   else if (strcmp(builtin, "or") == 0)
+   else if (icmp(builtin, "or"))
       return get_bool_lit(t, args[0] || args[1]);
-   else if (strcmp(builtin, "nor") == 0)
+   else if (icmp(builtin, "nor"))
       return get_bool_lit(t, !(args[0] || args[1]));
-   else if (strcmp(builtin, "xor") == 0)
+   else if (icmp(builtin, "xor"))
       return get_bool_lit(t, args[0] ^ args[1]);
-   else if (strcmp(builtin, "xnor") == 0)
+   else if (icmp(builtin, "xnor"))
       return get_bool_lit(t, !(args[0] ^ args[1]));
    else
       return t;
 }
 
-static tree_t simp_fcall_num(tree_t t, const char *builtin, literal_t *args)
+static tree_t simp_fcall_num(tree_t t, ident_t builtin, literal_t *args)
 {
    const int lkind = args[0].kind;  // Assume all types checked same
    assert(lkind == L_INT);
 
-   if (strcmp(builtin, "mul") == 0) {
+   if (icmp(builtin, "mul")) {
       return get_int_lit(t, args[0].i * args[1].i);
    }
-   else if (strcmp(builtin, "div") == 0) {
+   else if (icmp(builtin, "div")) {
       return get_int_lit(t, args[0].i / args[1].i);
    }
-   else if (strcmp(builtin, "add") == 0) {
+   else if (icmp(builtin, "add")) {
       return get_int_lit(t, args[0].i + args[1].i);
    }
-   else if (strcmp(builtin, "sub") == 0) {
+   else if (icmp(builtin, "sub")) {
       return get_int_lit(t, args[0].i - args[1].i);
    }
-   else if (strcmp(builtin, "neg") == 0) {
+   else if (icmp(builtin, "neg")) {
       return get_int_lit(t, -args[0].i);
    }
-   else if (strcmp(builtin, "identity") == 0) {
+   else if (icmp(builtin, "identity")) {
       return get_int_lit(t, args[0].i);
    }
-   else if (strcmp(builtin, "eq") == 0) {
+   else if (icmp(builtin, "eq")) {
       if (args[0].kind == L_INT && args[1].kind == L_INT)
          return get_bool_lit(t, args[0].i == args[1].i);
       else
          assert(false);
    }
-   else if (strcmp(builtin, "neq") == 0) {
+   else if (icmp(builtin, "neq")) {
       if (args[0].kind == L_INT && args[1].kind == L_INT)
          return get_bool_lit(t, args[0].i != args[1].i);
       else
          assert(false);
    }
-   else if (strcmp(builtin, "gt") == 0) {
+   else if (icmp(builtin, "gt")) {
       if (args[0].kind == L_INT && args[1].kind == L_INT)
          return get_bool_lit(t, args[0].i > args[1].i);
       else
          assert(false);
    }
-   else if (strcmp(builtin, "lt") == 0) {
+   else if (icmp(builtin, "lt")) {
       if (args[0].kind == L_INT && args[1].kind == L_INT)
          return get_bool_lit(t, args[0].i < args[1].i);
       else
@@ -193,10 +193,10 @@ static tree_t simp_fcall_num(tree_t t, const char *builtin, literal_t *args)
       return t;
 }
 
-static tree_t simp_fcall_agg(tree_t t, const char *builtin)
+static tree_t simp_fcall_agg(tree_t t, ident_t builtin)
 {
-   bool agg_low  = (strcmp(builtin, "agg_low") == 0);
-   bool agg_high = (strcmp(builtin, "agg_high") == 0);
+   bool agg_low  = icmp(builtin, "agg_low");
+   bool agg_high = icmp(builtin, "agg_high");
 
    if (agg_low || agg_high) {
       int64_t low = INT64_MAX, high = INT64_MIN;
@@ -238,7 +238,7 @@ static tree_t simp_fcall(tree_t t)
    assert(tree_kind(decl) == T_FUNC_DECL
           || tree_kind(decl) == T_FUNC_BODY);
 
-   const char *builtin = tree_attr_str(decl, builtin_i);
+   ident_t builtin = tree_attr_str(decl, builtin_i);
    if (builtin == NULL)
       return t;     // TODO: expand pure function calls
 
@@ -268,33 +268,6 @@ static tree_t simp_fcall(tree_t t)
       return t;
 }
 
-static tree_t simp_call_builtin(const char *name, const char *builtin,
-                                type_t type, ...)
-{
-   ident_t name_i = ident_new(name);
-
-   tree_t decl = tree_new(T_FUNC_DECL);
-   tree_set_ident(decl, name_i);
-   tree_add_attr_str(decl, ident_new("builtin"), builtin);
-
-   tree_t call = tree_new(T_FCALL);
-   tree_set_ident(call, name_i);
-   tree_set_ref(call, decl);
-   if (type != NULL)
-      tree_set_type(call, type);
-
-   va_list ap;
-   va_start(ap, type);
-   tree_t arg;
-   while ((arg = va_arg(ap, tree_t))) {
-      param_t p = { .kind = P_POS, .value = arg };
-      tree_add_param(call, p);
-   }
-   va_end(ap);
-
-   return call;
-}
-
 static tree_t simp_ref(tree_t t)
 {
    tree_t decl = tree_ref(t);
@@ -309,6 +282,10 @@ static tree_t simp_ref(tree_t t)
       }
       else
          return tree_value(decl);
+
+   case T_ALIAS:
+      return tree_value(decl);
+
    default:
       return t;
    }
@@ -322,10 +299,10 @@ static tree_t simp_attr_ref(tree_t t)
       tree_t decl = tree_ref(t);
       assert(tree_kind(decl) == T_FUNC_DECL);
 
-      const char *builtin = tree_attr_str(decl, builtin_i);
+      ident_t builtin = tree_attr_str(decl, builtin_i);
       assert(builtin != NULL);
 
-      if (strcmp(builtin, "length") == 0) {
+      if (icmp(builtin, "length")) {
          tree_t array = tree_param(t, 0).value;
          if (type_kind(tree_type(array)) == T_CARRAY) {
             range_t r = type_dim(tree_type(array), 0);
@@ -352,6 +329,110 @@ static tree_t simp_attr_ref(tree_t t)
    }
 }
 
+static tree_t simp_alias_index(tree_t decl, tree_t index)
+{
+   tree_t base_decl = tree_ref(tree_value(decl));
+   assert(tree_kind(base_decl) != T_ALIAS);
+
+   type_t alias_type = tree_type(decl);
+   type_t base_type  = tree_type(base_decl);
+
+   assert(type_kind(alias_type) == T_CARRAY);
+   assert(type_dims(alias_type) == 1);  // TODO: multi-dimensional arrays
+
+   range_t alias_r = type_dim(alias_type, 0);
+
+   type_t ptype = tree_type(index);
+
+   tree_t off = call_builtin("\"-\"", "sub", ptype,
+                             index, alias_r.left, NULL);
+
+   switch (type_kind(base_type)) {
+   case T_CARRAY:
+      // The transformation is a constant offset of indices
+      {
+         range_t base_r  = type_dim(base_type, 0);
+         if (alias_r.kind == base_r.kind) {
+            // Range in same direction
+            return call_builtin("\"+\"", "add", ptype, base_r.left, off, NULL);
+         }
+         else {
+            // Range in opposite direction
+            return call_builtin("\"-\"", "sub", ptype, base_r.left, off, NULL);
+         }
+      }
+      break;
+
+   case T_UARRAY:
+      // The transformation must be computed at runtime
+      {
+         tree_t ref = tree_new(T_REF);
+         tree_set_ref(ref, base_decl);
+         tree_set_ident(ref, tree_ident(base_decl));
+         tree_set_type(ref, ptype);
+
+         tree_t base_left = call_builtin(
+            "LEFT", "uarray_left", ptype, ref, NULL);
+
+         literal_t l;
+         l.kind = L_INT;
+         l.i = alias_r.kind;
+
+         tree_t rkind_lit = tree_new(T_LITERAL);
+         tree_set_literal(rkind_lit, l);
+         tree_set_type(rkind_lit, ptype);
+
+         // Call dircmp builtin which multiplies its third argument
+         // by -1 if the direction of the first argument is not equal
+         // to the direction of the second
+         tree_t off_dir = call_builtin(
+            "NVC.BUILTIN.DIRCMP", "uarray_dircmp", ptype,
+            ref, rkind_lit, off, NULL);
+
+         return call_builtin("+", "add", ptype, base_left, off_dir, NULL);
+      }
+      break;
+
+   default:
+      assert(false);
+   }
+}
+
+static tree_t simp_array_slice(tree_t t)
+{
+   tree_t decl = tree_ref(t);
+   // XXX: may not be decl e.g. nested array ref
+
+   if (tree_kind(decl) == T_ALIAS) {
+      tree_t base_decl = tree_ref(tree_value(decl));
+      type_t base_type = tree_type(base_decl);
+
+      switch (type_kind(base_type)) {
+      case T_CARRAY:
+         {
+            range_t slice_r = tree_range(t);
+            slice_r.left  = simp_alias_index(decl, slice_r.left);
+            slice_r.right = simp_alias_index(decl, slice_r.right);
+
+            slice_r.kind = type_dim(base_type, 0).kind;
+
+            type_change_dim(tree_type(t), 0, slice_r);
+
+            tree_set_range(t, slice_r);
+            tree_set_ref(t, base_decl);
+         }
+         break;
+      case T_UARRAY:
+         // Transformation is done at runtime by making a copy
+         break;
+      default:
+         assert(false);
+      }
+   }
+
+   return t;
+}
+
 static tree_t simp_array_ref(tree_t t)
 {
    tree_t decl = tree_ref(t);
@@ -362,80 +443,14 @@ static tree_t simp_array_ref(tree_t t)
       // indexing of the underlying array
 
       tree_t base_decl = tree_ref(tree_value(decl));
-      assert(tree_kind(base_decl) != T_ALIAS);
-
-      type_t alias_type = tree_type(decl);
-      type_t base_type  = tree_type(base_decl);
 
       tree_t new = tree_new(T_ARRAY_REF);
       tree_set_loc(new, tree_loc(t));
       tree_set_ref(new, base_decl);
-      tree_set_type(new, type_base(base_type));
-
-      assert(type_kind(alias_type) == T_CARRAY);
-      assert(type_dims(alias_type) == 1);  // TODO: multi-dimensional arrays
-
-      range_t alias_r = type_dim(alias_type, 0);
+      tree_set_type(new, type_base(tree_type(base_decl)));
 
       param_t p = tree_param(t, 0);
-      type_t ptype = tree_type(p.value);
-
-      tree_t off = simp_call_builtin(
-         "-", "sub", ptype, p.value, alias_r.left, NULL);
-
-      switch (type_kind(base_type)) {
-      case T_CARRAY:
-         // The transformation is a constant offset of indices
-         {
-            range_t base_r  = type_dim(base_type, 0);
-            if (alias_r.kind == base_r.kind) {
-               // Range in same direction
-               p.value = simp_call_builtin(
-                  "+", "add", ptype, base_r.left, off, NULL);
-            }
-            else {
-               // Range in opposite direction
-               p.value = simp_call_builtin(
-                  "-", "sub", ptype, base_r.left, off, NULL);
-            }
-         }
-         break;
-
-      case T_UARRAY:
-         // The transformation must be computed at runtime
-         {
-            tree_t ref = tree_new(T_REF);
-            tree_set_ref(ref, base_decl);
-            tree_set_ident(ref, tree_ident(base_decl));
-            tree_set_type(ref, ptype);
-
-            tree_t base_left = simp_call_builtin(
-               "LEFT", "uarray_left", ptype, ref, NULL);
-
-            literal_t l;
-            l.kind = L_INT;
-            l.i = alias_r.kind;
-
-            tree_t rkind_lit = tree_new(T_LITERAL);
-            tree_set_literal(rkind_lit, l);
-            tree_set_type(rkind_lit, ptype);
-
-            // Call dircmp builtin which multiplies its third argument
-            // by -1 if the direction of the first argument is not equal
-            // to the direction of the second
-            tree_t off_dir = simp_call_builtin(
-               "NVC.BUILTIN.DIRCMP", "uarray_dircmp", ptype,
-               ref, rkind_lit, off, NULL);
-
-            p.value = simp_call_builtin(
-               "+", "add", ptype, base_left, off_dir, NULL);
-         }
-         break;
-
-      default:
-         assert(false);
-      }
-
+      p.value = simp_alias_index(decl, p.value);
       tree_add_param(new, p);
 
       return new;
@@ -603,11 +618,7 @@ static tree_t simp_for(tree_t t)
    for (unsigned i = 0; i < tree_stmts(t); i++)
       tree_add_stmt(wh, tree_stmt(t, i));
 
-   tree_t eq = tree_new(T_FUNC_DECL);
-   tree_set_ident(eq, ident_new("="));
-   tree_add_attr_str(eq, ident_new("builtin"), "eq");
-
-   tree_t cmp = simp_call_builtin("=", "eq", NULL, var, r.right, NULL);
+   tree_t cmp = call_builtin("\"=\"", "eq", NULL, var, r.right, NULL);
 
    tree_t exit = tree_new(T_EXIT);
    tree_set_ident(exit, ident_uniq("for_exit"));
@@ -618,22 +629,22 @@ static tree_t simp_for(tree_t t)
       assert(tree_kind(r.left) == T_FCALL);
       param_t p = tree_param(r.left, 0);
 
-      tree_t asc = simp_call_builtin("NVC.BUILTIN.ASCENDING", "uarray_asc",
-                                     NULL, p.value, NULL);
+      tree_t asc = call_builtin("NVC.BUILTIN.ASCENDING", "uarray_asc",
+                                NULL, p.value, NULL);
       next = tree_new(T_IF);
       tree_set_value(next, asc);
       tree_set_ident(next, ident_uniq("for_next"));
 
-      tree_t succ_call = simp_call_builtin("NVC.BUILTIN.SUCC", "succ",
-                                           tree_type(decl), var, NULL);
+      tree_t succ_call = call_builtin("NVC.BUILTIN.SUCC", "succ",
+                                      tree_type(decl), var, NULL);
 
       tree_t a1 = tree_new(T_VAR_ASSIGN);
       tree_set_ident(a1, ident_uniq("for_next_asc"));
       tree_set_target(a1, var);
       tree_set_value(a1, succ_call);
 
-      tree_t pred_call = simp_call_builtin("NVC.BUILTIN.PRED", "pred",
-                                           tree_type(decl), var, NULL);
+      tree_t pred_call = call_builtin("NVC.BUILTIN.PRED", "pred",
+                                      tree_type(decl), var, NULL);
 
       tree_t a2 = tree_new(T_VAR_ASSIGN);
       tree_set_ident(a2, ident_uniq("for_next_dsc"));
@@ -647,12 +658,12 @@ static tree_t simp_for(tree_t t)
       tree_t call;
       switch (r.kind) {
       case RANGE_TO:
-         call = simp_call_builtin("NVC.BUILTIN.SUCC", "succ",
-                                  tree_type(decl), var, NULL);
+         call = call_builtin("NVC.BUILTIN.SUCC", "succ",
+                             tree_type(decl), var, NULL);
          break;
       case RANGE_DOWNTO:
-         call = simp_call_builtin("NVC.BUILTIN.PRED", "pred",
-                                  tree_type(decl), var, NULL);
+         call = call_builtin("NVC.BUILTIN.PRED", "pred",
+                             tree_type(decl), var, NULL);
          break;
       default:
          assert(false);
@@ -800,6 +811,8 @@ static tree_t simp_tree(tree_t t, void *context)
       return simp_process(t);
    case T_ARRAY_REF:
       return simp_array_ref(t);
+   case T_ARRAY_SLICE:
+      return simp_array_slice(t);
    case T_ATTR_REF:
       return simp_attr_ref(t);
    case T_FCALL:
@@ -825,7 +838,7 @@ static tree_t simp_tree(tree_t t, void *context)
 
 static void simp_intern_strings(void)
 {
-   // Intern some commponly used strings
+   // Intern some commonly used strings
 
    std_bool_i = ident_new("STD.STANDARD.BOOLEAN");
    builtin_i  = ident_new("builtin");
