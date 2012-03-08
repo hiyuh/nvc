@@ -1,6 +1,5 @@
-#!/bin/bash
+#!/bin/dash
 
-# FIXME: Clean up to be POSIX sh subset to use dash.
 # FIXME: This script creates test/work, but "make check" expects no "test/work".
 #        Before "make check", make sure no "test/work" yourself.
 # FIXME: Implement logging functionalities like test/run_regr.rb?
@@ -9,7 +8,7 @@
 #       Color is specified by 1st and 2nd argument for foreground and
 #       background.
 #       This colorize is made by VT100 display attributes.
-function cecho() {
+cecho() {
 	local attr="\033[" ;
 	case $1 in
 		black)   attr="${attr}30;" ; ;;
@@ -32,24 +31,24 @@ function cecho() {
 		white)   attr="${attr}47m" ; ;;
 	esac ;
 	shift 2 ;
-	echo -e "${attr}${*}\033[0m" ;
+	echo "${attr}${*}\033[0m" ;
 }
 
 NVC="NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc" ;
 
 # NOTE: eeval() does echo all arguments and evaluate them.
-function eeval() {
+eeval() {
 	cecho cyan black "$*" ;
 	eval $* ;
 }
 
 # NOTE: analyze() does analyze VHDL file given by 1st argument using NVC.
-function analyze() {
+analyze() {
 	eeval ${NVC} -a $1 ;
 }
 
 # NOTE: elaborate() does elaborate VHDL unit given by 1st argument using NVC.
-function elaborate() {
+elaborate() {
 	eeval ${NVC} -e $1 ;
 }
 
@@ -59,7 +58,7 @@ function elaborate() {
 # FIXME: IMHO, regression should not have requirement to specify --stop-time,
 #        except testing --stop-time functionality itself.
 # FIXME: Implement expectation collation w/ regress/gold, if required.
-function run() {
+run() {
 	local o ;
 	case $1 in
 		counter) o="--stop-time=50ns"  ; ;;
@@ -83,7 +82,7 @@ case $1 in
 				done ;
 			;;
 			*)
-				while [[ $# -gt 0 ]] ;
+				while [ $# -gt 0 ] ;
 				do
 					v="regress/${1}.vhd" ;
 					cecho yellow black ">> analyze ${v}" ;
@@ -100,13 +99,13 @@ case $1 in
 			all)
 				for v in regress/*.vhd ;
 				do
-					u="$(basename ${v/.vhd/})" ;
+					u="$(basename ${v} | sed -e 's|.vhd||')" ;
 					cecho yellow black ">> elaborate ${u}" ;
 					elaborate ${u} ;
 				done ;
 			;;
 			*)
-				while [[ $# -gt 0 ]] ;
+				while [ $# -gt 0 ] ;
 				do
 					cecho yellow black ">> elaborate $1" ;
 					elaborate $1 ;
@@ -122,13 +121,13 @@ case $1 in
 			all)
 				for v in regress/*.vhd ;
 				do
-					u="$(basename ${v/.vhd/})" ;
+					u="$(basename ${v} | sed -e 's|.vhd||')" ;
 					cecho yellow black ">> run ${u}" ;
 					run ${u} ;
 				done ;
 			;;
 			*)
-				while [[ $# -gt 0 ]] ;
+				while [ $# -gt 0 ] ;
 				do
 					cecho yellow black ">> run $1" ;
 					run $1 ;
@@ -151,12 +150,12 @@ case $1 in
 			all)
 				for v in regress/*.vhd ;
 				do
-					u="$(basename ${v/.vhd/})" ;
+					u="$(basename ${v} | sed -e 's|.vhd||')" ;
 					${p} all ${u} ;
 				done ;
 			;;
 			*)
-				while [[ $# -gt 0 ]] ;
+				while [ $# -gt 0 ] ;
 				do
 					${p} all $1 ;
 					shift 1 ;
