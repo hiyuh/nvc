@@ -414,3 +414,8 @@ Note, I filed a bug and still am investigating:
 https://bugs.gentoo.org/show_bug.cgi?id=403519
 
 Maybe, LLVM is broken on Gentoo/PowerPC?
+
+------------------------
+Support make -j* in lib/
+------------------------
+SSIA, at least lib/ieee/Makefile.am works properly only when make -j1.
