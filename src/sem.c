@@ -680,6 +680,11 @@ static void sem_declare_predefined_ops(tree_t decl)
          tree_add_attr_tree(decl, ident_new("RIGHT"), sem_make_ref(right));
          tree_add_attr_tree(decl, ident_new("LOW"), sem_make_ref(left));
          tree_add_attr_tree(decl, ident_new("HIGH"), sem_make_ref(right));
+
+         tree_t image = sem_builtin_fn(ident_new("NVC.BUILTIN.IMAGE"),
+                                       sem_std_type("STRING"),
+                                       "image", t, NULL);
+         tree_add_attr_tree(decl, ident_new("IMAGE"), image);
       }
       break;
 
@@ -945,15 +950,37 @@ static bool sem_readable(tree_t t)
    }
 }
 
-static bool sem_check_array_dims(type_t type)
+static bool sem_check_array_dims(type_t type, type_t constraint)
 {
    for (unsigned i = 0; i < type_dims(type); i++) {
       range_t r = type_dim(type, i);
 
-      // XXX: constrained by index type
-      //      push type set first
-      if (!sem_check_range(&r))
+      type_t index_type =
+         constraint ? type_index_constr(constraint, i) : NULL;
+
+      type_set_push();
+      if (index_type)
+         type_set_add(index_type);
+      bool ok = sem_check_range(&r);
+      type_set_pop();
+
+      if (!ok)
          return false;
+
+      if (index_type) {
+         tree_t error = NULL;
+         if (!type_eq(tree_type(r.left), index_type))
+            error = r.left;
+         else if (!type_eq(tree_type(r.right), index_type))
+            error = r.right;
+
+         if (error)
+            sem_error(error, "type of bound does not match type of index %s",
+                      type_pp(index_type));
+
+         tree_set_type(r.left, index_type);
+         tree_set_type(r.right, index_type);
+      }
 
       type_change_dim(type, i, r);
    }
@@ -981,7 +1008,7 @@ static bool sem_check_type(tree_t t, type_t *ptype)
                   sem_error(t, "expected %d array dimensions but %d given",
                             type_index_constrs(base), type_dims(*ptype));
 
-               if (!sem_check_array_dims(*ptype))
+               if (!sem_check_array_dims(*ptype, base))
                   return false;
 
                type_t collapse = type_new(T_CARRAY);
@@ -1103,7 +1130,7 @@ static bool sem_check_type_decl(tree_t t)
 
    switch (type_kind(type)) {
    case T_CARRAY:
-      return sem_check_array_dims(base);
+      return sem_check_array_dims(base, NULL);
 
    case T_UARRAY:
       for (unsigned i = 0; i < type_index_constrs(type); i++) {
@@ -2341,13 +2368,11 @@ static tree_t sem_array_len(type_t type)
 
    tree_t tmp;
    if (r.kind == RANGE_TO)
-      tmp = call_builtin("\"-\"", "sub", index_type,
-                         r.right, r.left, NULL);
+      tmp = call_builtin("sub", index_type, r.right, r.left, NULL);
    else
-      tmp = call_builtin("\"-\"", "sub", index_type,
-                         r.left, r.right, NULL);
+      tmp = call_builtin("sub", index_type, r.left, r.right, NULL);
 
-   return call_builtin("\"+\"", "add", index_type, tmp, one, NULL);
+   return call_builtin("add", index_type, tmp, one, NULL);
 }
 
 static bool sem_check_concat_param(tree_t t, type_t expect)
@@ -2448,12 +2473,12 @@ static bool sem_check_concat(tree_t t)
       if (lkind == T_CARRAY)
          left_len = sem_array_len(ltype);
       else
-         left_len = call_builtin("length", "length", std_int, left, NULL);
+         left_len = call_builtin("length", std_int, left, NULL);
 
       if (rkind == T_CARRAY)
          right_len = sem_array_len(rtype);
       else
-         right_len = call_builtin("length", "length", std_int, right, NULL);
+         right_len = call_builtin("length", std_int, right, NULL);
 
       type_t result = type_new(T_CARRAY);
       type_set_ident(result, type_ident(ltype));
@@ -2462,11 +2487,11 @@ static bool sem_check_concat(tree_t t)
       tree_t one = sem_int_lit(index_type, 1);
 
       tree_t result_len = call_builtin(
-         "\"+\"", "add", index_type, left_len, right_len, NULL);
+         "add", index_type, left_len, right_len, NULL);
       tree_t tmp = call_builtin(
-         "\"-\"", "sub", index_type, result_len, index_r.left, NULL);
+         "add", index_type, result_len, index_r.left, NULL);
       tree_t result_right = call_builtin(
-         "\"-\"", "sub", index_type, tmp, one, NULL);
+         "sub", index_type, tmp, one, NULL);
 
       range_t result_r = {
          .kind  = index_r.kind,
@@ -2580,10 +2605,8 @@ static bool sem_check_aggregate(tree_t t)
       range_t index_r = type_dim(index_type, 0);
 
       if (have_named) {
-         tree_t low = call_builtin("NVC.BUILTIN.AGG_LOW", "agg_low",
-                                   index_type, t, NULL);
-         tree_t high = call_builtin("NVC.BUILTIN.AGG_HIGH", "agg_high",
-                                    index_type, t, NULL);
+         tree_t low = call_builtin("agg_low", index_type, t, NULL);
+         tree_t high = call_builtin("agg_high", index_type, t, NULL);
 
          range_t r = {
             .kind  = index_r.kind,
@@ -2598,7 +2621,7 @@ static bool sem_check_aggregate(tree_t t)
          range_t r = {
             .kind  = index_r.kind,
             .left  = index_r.left,
-            .right = call_builtin("\"+\"", "add", index_type, n_elems,
+            .right = call_builtin("add", index_type, n_elems,
                                   index_r.left, NULL)
          };
          type_add_dim(tmp, r);

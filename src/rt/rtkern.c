@@ -88,9 +88,23 @@ struct signal {
    sig_event_fn_t   event_cb;
 };
 
+struct uarray {
+   void    *ptr;
+   int32_t left;
+   int32_t right;
+   int8_t  dir;
+};
+
+struct loaded {
+   const char    *name;
+   tree_rd_ctx_t read_ctx;
+   struct loaded *next;
+};
+
 static struct rt_proc   *procs = NULL;
 static struct rt_proc   *active_proc = NULL;
 static struct sens_list *resume = NULL;
+static struct loaded    *loaded = NULL;
 
 static heap_t        eventq_heap = NULL;
 static size_t        n_procs = 0;
@@ -115,6 +129,7 @@ static void deltaq_insert_driver(uint64_t delta, struct signal *signal,
 static void rt_alloc_driver(struct signal *sig, int source,
                             uint64_t after, uint64_t value);
 static void *rt_tmp_alloc(size_t sz);
+static tree_t rt_recall_tree(const char *unit, int32_t where);
 static void _tracef(const char *fmt, ...);
 
 #define TRACE(...) if (trace_on) _tracef(__VA_ARGS__)
@@ -259,8 +274,8 @@ void _sched_event(void *_sig, int32_t n)
    }
 }
 
-void _assert_fail(const uint8_t *msg, int32_t msg_len,
-                  int8_t severity, int32_t where)
+void _assert_fail(const uint8_t *msg, int32_t msg_len, int8_t severity,
+                  int32_t where, const char *module)
 {
    // LRM 93 section 8.2
    // The error message consists of at least
@@ -275,7 +290,9 @@ void _assert_fail(const uint8_t *msg, int32_t msg_len,
       "Note", "Warning", "Error", "Failure"
    };
 
-   tree_t t = tree_read_recall(tree_rd_ctx, where);
+   tree_t t = rt_recall_tree(module, where);
+   const loc_t *loc = tree_loc(t);
+   bool is_report = tree_attr_int(t, ident_new("is_report"), 0);
 
    char *copy = NULL;
    if (msg_len >= 0) {
@@ -298,10 +315,9 @@ void _assert_fail(const uint8_t *msg, int32_t msg_len,
    if (severity >= EXIT_SEVERITY)
       fn = fatal_at;
 
-   (*fn)(tree_loc(t), "%s+%d: %s %s: %s",
+   (*fn)(loc, "%s+%d: %s %s: %s",
          fmt_time(now), iteration,
-         (tree_attr_int(t, ident_new("is_report"), 0)
-          ? "Report" : "Assertion"),
+         (is_report ? "Report" : "Assertion"),
          levels[severity],
          (copy != NULL ? copy : (const char *)msg));
 
@@ -361,32 +377,38 @@ void _array_copy(void *dst, const void *src,
       memcpy((char *)dst + (off * sz), src, n * sz);
 }
 
-int8_t _array_eq(const void *lhs, const void *rhs,
-                 int32_t n, int32_t sz, int8_t op)
+struct uarray _image(int64_t val, int32_t where, const char *module)
 {
-   TRACE("_array_eq lhs=%p rhs=%p %dx%d op=%d", lhs, rhs, n, sz, op);
-   if (op) {
-      const uint8_t *pl = lhs;
-      const uint8_t *pr = (const uint8_t *)rhs + ((n - 1) * sz);
-      while (n--) {
-         for (int i = 0; i < sz; i++) {
-            if (*(pl + i) != *(pr + i))
-               return 0;
-         }
-         pl += sz;
-         pr -= sz;
-      }
-      return 1;
-   }
-   else
-      return memcmp(lhs, rhs, n * sz) == 0;
-}
+   tree_t t = rt_recall_tree(module, where);
 
-int8_t *_image(int64_t val)
-{
-   char *buf = rt_tmp_alloc(32);
-   snprintf(buf, 32, "%"PRIi64, val);
-   return (int8_t*)buf;
+   type_t type = tree_type(t);
+   while (type_kind(type) == T_SUBTYPE)
+      type = type_base(type);
+
+   const size_t max = 32;
+   char *buf = rt_tmp_alloc(max);
+   size_t len = 0;
+
+   switch (type_kind(type)) {
+   case T_INTEGER:
+      len = snprintf(buf, max, "%"PRIi64, val);
+      break;
+
+   case T_ENUM:
+      len = snprintf(buf, max, "%s",
+                     istr(tree_ident(type_enum_literal(type, val))));
+      break;
+
+   default:
+      fatal_at(tree_loc(t), "cannot use 'IMAGE with this type");
+   }
+
+   struct uarray u;
+   u.ptr   = buf;
+   u.left  = 0;
+   u.right = len - 1;
+   u.dir   = RANGE_TO;
+   return u;
 }
 
 void _debug_out(int32_t val)
@@ -762,6 +784,48 @@ static void rt_cycle(void)
    n_active_signals = 0;
 }
 
+static void rt_load_unit(const char *name)
+{
+   char *tmp = strdup(name);
+   const char *lib_name  = strtok(tmp, ".");
+
+   lib_t lib = lib_find(lib_name, true, true);
+   if (lib == NULL)
+      fatal("cannot continue");
+
+   tree_rd_ctx_t ctx = NULL;
+   if (lib_get_ctx(lib, ident_new(name), &ctx) == NULL)
+      fatal("cannot find unit %s", name);
+
+   struct loaded *l = xmalloc(sizeof(struct loaded));
+   l->next     = NULL;
+   l->name     = name;
+   l->read_ctx = ctx;
+
+   if (loaded == NULL)
+      loaded = l;
+   else {
+      struct loaded *it;
+      for (it = loaded; it->next != NULL; it = it->next)
+         ;
+      it->next = l;
+   }
+
+   free(tmp);
+}
+
+static tree_t rt_recall_tree(const char *unit, int32_t where)
+{
+   struct loaded *it;
+   for (it = loaded; it != NULL; it = it->next) {
+      if (it->name == unit)
+         return tree_read_recall(it->read_ctx, where);
+   }
+
+   rt_load_unit(unit);
+   return rt_recall_tree(unit, where);
+}
+
 static void rt_one_time_init(void)
 {
    i_signal = ident_new("signal");
@@ -774,7 +838,6 @@ static void rt_one_time_init(void)
    jit_bind_fn("_assert_fail", _assert_fail);
    jit_bind_fn("_tmp_alloc", _tmp_alloc);
    jit_bind_fn("_array_copy", _array_copy);
-   jit_bind_fn("_array_eq", _array_eq);
    jit_bind_fn("_image", _image);
    jit_bind_fn("_debug_out", _debug_out);
 
