@@ -413,7 +413,11 @@ Note, I filed a bug and still am investigating:
 
 https://bugs.gentoo.org/show_bug.cgi?id=403519
 
-Maybe, LLVM is broken on Gentoo/PowerPC?
+LLVM is broken on Gentoo/PowerPC (at least r152595), if w/ "-maltivec -mabi=altivec".
+A workaround is set "-mno-altivec -mabi=no-altivec".
+Note, -mcpu and -mtune does enable/disable altivec related flags too,
+so just replacing only "-maltivec -mabi=altivec" to "-mno-altivec -mabi=no-altivec"
+may not work as expected.
 
 ------------------------
 Support make -j* in lib/
