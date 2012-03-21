@@ -375,7 +375,11 @@ static bool type_set_uniq_composite(type_t *pt)
 
    *pt = NULL;
    for (int i = 0; i < top_type_set->n_members; i++) {
-      type_kind_t kind = type_kind(top_type_set->members[i]);
+      type_t type = top_type_set->members[i];
+      while (type_kind(type) == T_SUBTYPE)
+         type = type_base(type);
+
+      type_kind_t kind = type_kind(type);
       bool comp = (kind == T_CARRAY || kind == T_UARRAY);
       if (comp) {
          if (*pt != NULL)
@@ -515,24 +519,10 @@ static void sem_declare_predefined_ops(tree_t decl)
    ident_t plus  = ident_new("\"+\"");
    ident_t minus = ident_new("\"-\"");
 
-   type_t std_int = NULL;
-   type_t std_bool = NULL;
-
    // Predefined operators
 
-   switch (type_kind(t)) {
-   case T_INCOMPLETE:
-      assert(false);   // Shouldn't reach here
-
-   case T_PHYSICAL:
-      // These types require INTEGER to be declared
-      std_int = sem_std_type("INTEGER");
-
-      // Fall-through
-   default:
-      // These types require BOOLEAN to be declared
-      std_bool = sem_std_type("BOOLEAN");
-   }
+   type_t std_bool = sem_std_type("BOOLEAN");
+   type_t std_int  = sem_std_type("INTEGER");
 
    switch (type_kind(t)) {
    case T_SUBTYPE:
@@ -591,6 +581,12 @@ static void sem_declare_predefined_ops(tree_t decl)
       // Sign operators
       sem_declare_unary(plus, t, t, "identity");
       sem_declare_unary(minus, t, t, "neg");
+
+      // Exponentiation
+      sem_declare_binary(ident_new("\"**\""), t, std_int, t, "exp");
+
+      // Absolute value
+      sem_declare_unary(ident_new("\"abs\""), t, t, "abs");
 
       // Fall-through
    case T_ENUM:
@@ -1256,11 +1252,15 @@ static tree_t sem_default_value(type_t type)
    (void)sem_check_subtype(NULL, type, &base);
 
    switch (type_kind(base)) {
+   case T_UARRAY:
+      assert(type_kind(type) == T_SUBTYPE);
+      // Fall-through
+
    case T_CARRAY:
       {
          tree_t def = NULL;
          for (int i = type_dims(type) - 1 ; i >= 0; i--) {
-            tree_t val = (def ? def : sem_default_value(type_base(type)));
+            tree_t val = (def ? def : sem_default_value(type_base(base)));
             def = tree_new(T_AGGREGATE);
             assoc_t a = {
                .kind = A_OTHERS,
@@ -1646,18 +1646,17 @@ static bool sem_check_package_body(tree_t t)
          tree_t decl = tree_decl(t, n);
          ident_t unqual = tree_ident(decl);
 
+         ok = sem_check(decl) && ok;
+
          // Make the unqualified name visible inside the package except
          // in the case of function bodies where the declaration is
          // already visible
-         if (sem_check(decl)) {
-            bool make_visible =
-               (tree_kind(decl) != T_FUNC_BODY
-                || !sem_check_duplicate(decl, T_FUNC_DECL));
-            if (make_visible)
-               scope_insert_alias(decl, unqual);
-         }
-         else
-            ok = false;
+         bool make_visible =
+            (tree_kind(decl) != T_FUNC_BODY
+             || !sem_check_duplicate(decl, T_FUNC_DECL));
+
+         if (make_visible)
+            scope_insert_alias(decl, unqual);
       }
    }
 
@@ -2534,15 +2533,9 @@ static bool sem_check_aggregate(tree_t t)
    if (!type_set_uniq_composite(&composite_type))
       sem_error(t, "type of aggregate is ambiguous");
 
-   // Aggregates are only valid for composite types
-
-   switch (type_kind(composite_type)) {
-   case T_CARRAY:
-   case T_UARRAY:
-      break;
-   default:
-      sem_error(t, "aggregates must have a composite type");
-   }
+   type_t base_type = composite_type;
+   while (type_kind(base_type) == T_SUBTYPE)
+      base_type = type_base(base_type);
 
    // All positional associations must appear before named associations
    // and those must appear before any others association
@@ -2585,8 +2578,8 @@ static bool sem_check_aggregate(tree_t t)
    // Named and positional associations cannot be mixed in array
    // aggregates
 
-   bool array = (type_kind(composite_type) == T_CARRAY
-                 || type_kind(composite_type) == T_UARRAY);
+   bool array = (type_kind(base_type) == T_CARRAY
+                 || type_kind(base_type) == T_UARRAY);
    if (array && have_named && have_pos)
       sem_error(t, "named and positional associations cannot be "
                 "mixed in array aggregates");
@@ -2634,16 +2627,16 @@ static bool sem_check_aggregate(tree_t t)
    // a one-dimensional array otherwise construct an array type
    // with n-1 dimensions.
 
-   type_t base = NULL;
+   type_t elem_type = NULL;
    if (type_dims(composite_type) == 1)
-      base = type_base(composite_type);
+      elem_type = type_base(base_type);
    else {
-      base = type_new(T_CARRAY);
-      type_set_ident(base, type_ident(composite_type));
-      type_set_base(base, type_base(composite_type));
+      elem_type = type_new(T_CARRAY);
+      type_set_ident(elem_type, type_ident(composite_type));
+      type_set_base(elem_type, type_base(base_type));
 
       for (unsigned i = 1; i < type_dims(composite_type); i++)
-         type_add_dim(base, type_dim(composite_type, i));
+         type_add_dim(elem_type, type_dim(composite_type, i));
    }
 
    for (unsigned i = 0; i < tree_assocs(t); i++) {
@@ -2665,14 +2658,14 @@ static bool sem_check_aggregate(tree_t t)
          break;
       }
 
-      if (!sem_check_constrained(a.value, base))
+      if (!sem_check_constrained(a.value, elem_type))
          return false;
 
-      if (!type_eq(base, tree_type(a.value)))
+      if (!type_eq(elem_type, tree_type(a.value)))
          sem_error(a.value, "type of element %s does not match base "
                    "type of aggregate %s",
                    istr(type_ident(tree_type(a.value))),
-                   istr(type_ident(base)));
+                   istr(type_ident(elem_type)));
 
    }
 
