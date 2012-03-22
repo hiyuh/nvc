@@ -76,7 +76,23 @@ These errors may be cygwin specific and are caused by clang/clang++'s bug, I thi
 ------------------------------------------------------------------------------------------
 Fix "*** glibc detected *** path/to/nvc : double free or corruption (out): 0xXXXXXXXX ***"
 ------------------------------------------------------------------------------------------
-This "double free or corruption" occurs only on Gentoo/PowerPC.
+This "double free or corruption" occurs on Gentoo/PowerPC.
+
+Investigating w/ LLVM-3.0 and svn trunk and great helping by NAKAMURA Takumi AKA chapuni,
+I finally realized that this problem can be reproduced when using altivec on ppc32-linux.
+The point is, LLVM has incomplete support for altivec on ppc-linux, even w/ svn trunk.
+And the workaround is, don't enable altivec when compiling LLVM.
+
+So appending "-mno-altivec -mabi=no-altivec" to CFLAGS and CXXFLAGS can avoid this issue.
+Note, -mcpu and -mtune does enable/disable altivec related flags too, so just replacing
+only "-maltivec -mabi=altivec" to "-mno-altivec -mabi=no-altivec" may not work as expected.
+
+FYI, I filed a bug also for TEXTREL:
+
+https://bugs.gentoo.org/show_bug.cgi?id=403519
+
+Anyway, for real fix, I should fix LLVM's lib/Target/PowerPC/PPCJITInfo.cpp or so...
+
 See more detail:
 
  $ uname -a
@@ -84,6 +100,10 @@ See more detail:
 
  $ eix -Ic sys-devel/llvm
  [I] sys-devel/llvm (3.0-r1@02/17/12): Low Level Virtual Machine
+ [NOTE: This sys-devel/llvm-3.0-r1 is compiled w/;
+          CFLAGS="-O2 -mtune=G4 -mcpu=G4 -maltivec -mabi=altivec -Wall -ggdb"
+        CXXFLAGS="-O2 -mtune=G4 -mcpu=G4 -maltivec -mabi=altivec -Wall -ggdb"
+         LDFLAGS="-Wl,-O1 -Wl,--as-needed"]
 
  $ llvm-config --version
  3.0
@@ -94,6 +114,7 @@ See more detail:
  [SNIP]
  $ ./configure
  [SNIP]
+ [NOTE: Prepare lib/ieee before make. :P]
  $ make
  [SNIP]
  $ make check
@@ -426,16 +447,6 @@ Try ieee1 regression again, and w/ valgrind:
  ==15534==
  ==15534== For counts of detected and suppressed errors, rerun with: -v
  ==15534== ERROR SUMMARY: 1 errors from 1 contexts (suppressed: 7 from 5)
-
-Note, I filed a bug and still am investigating:
-
-https://bugs.gentoo.org/show_bug.cgi?id=403519
-
-LLVM is broken on Gentoo/PowerPC (at least r152595), if w/ "-maltivec -mabi=altivec".
-A workaround is set "-mno-altivec -mabi=no-altivec".
-Note, -mcpu and -mtune does enable/disable altivec related flags too,
-so just replacing only "-maltivec -mabi=altivec" to "-mno-altivec -mabi=no-altivec"
-may not work as expected.
 
 ------------------------
 Support make -j* in lib/
