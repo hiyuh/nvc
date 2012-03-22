@@ -101,9 +101,9 @@ See more detail:
  $ eix -Ic sys-devel/llvm
  [I] sys-devel/llvm (3.0-r1@02/17/12): Low Level Virtual Machine
  [NOTE: This sys-devel/llvm-3.0-r1 is compiled w/;
-          CFLAGS="-O2 -mtune=G4 -mcpu=G4 -maltivec -mabi=altivec -Wall -ggdb"
-        CXXFLAGS="-O2 -mtune=G4 -mcpu=G4 -maltivec -mabi=altivec -Wall -ggdb"
-         LDFLAGS="-Wl,-O1 -Wl,--as-needed"]
+           CFLAGS="-O2 -mtune=G4 -mcpu=G4 -maltivec -mabi=altivec -Wall -ggdb"
+         CXXFLAGS="-O2 -mtune=G4 -mcpu=G4 -maltivec -mabi=altivec -Wall -ggdb"
+          LDFLAGS="-Wl,-O1 -Wl,--as-needed"]
 
  $ llvm-config --version
  3.0
@@ -452,3 +452,275 @@ Try ieee1 regression again, and w/ valgrind:
 Support make -j* in lib/
 ------------------------
 SSIA, at least lib/ieee/Makefile.am works properly only when make -j1.
+
+-----------------------
+Fix SIGSEGV on _image()
+-----------------------
+Even if I W/A LLVM altivec bug, NVC vomits SIGSEGV on _image() on ppc32-linux.
+
+See more detail:
+
+ $ uname -a
+ Linux wombat 3.3.0-gentoo #1 Wed Mar 21 11:48:23 JST 2012 ppc 7447A, altivec supported PowerMac10,2 GNU/Linux
+
+ $ eix -Ic sys-devel/llvm
+ [I] sys-devel/llvm (9999@03/22/12): Low Level Virtual Machine
+ [NOTE: This sys-devel/llvm-9999 is compiled w/;
+           CFLAGS="-O2 -mtune=G4 -mcpu=G4 -maltivec -mabi=altivec -Wall -fno-strict-aliasing -mno-altivec -mabi=no-altivec -ggdb"
+         CXXFLAGS="-O2 -mtune=G4 -mcpu=G4 -maltivec -mabi=altivec -Wall -fno-strict-aliasing -mno-altivec -mabi=no-altivec -ggdb"
+          LDFLAGS="-Wl,-O1 -Wl,--as-needed"
+        to workaround LLVM's altivec bug.]
+
+ $ llvm-config --version
+ 3.1svn
+ [NOTE: This sys-devel/llvm-999 is live svn ebuild.
+        ATM, used svn trunk tells me it is r153238.]
+
+ $ git clone git://github.com/hiyuh/nvc.git
+ [SNIP]
+ $ ./autogen.sh
+ [SNIP]
+ $ CFLAGS="-O0 -ggdb" CXXFLAGS="-O0 -ggdb" ./configure
+ [SNIP]
+ [NOTE: Prepare lib/ieee before make. :P]
+ $ make
+ [SNIP]
+ $ make check
+ [SNIP]
+           image : failed
+ /home/hiyuh/git-repos/nvc/src/nvc -a /home/hiyuh/git-repos/nvc/test/regress/image.vhd
+ /home/hiyuh/git-repos/nvc/src/nvc -e image
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/logs/image/work/_WORK.IMAGE.final.bc /home/hiyuh/git-repos/nvc/test/logs/image/work/_WORK.IMAGE.elab.bc /home/hiyuh/git-repos/nvc/test/logs/image/work/_WORK.P-body.bc
+ /home/hiyuh/git-repos/nvc/src/nvc -r  image
+
+ *** Caught signal 11 (SIGSEGV) [address=(nil), ip=0xfa1d110] ***
+
+ -------- STACK TRACE --------
+ /lib/libc.so.6(strlen+0xc) [0xfa1d110]
+ [0x2cd]
+ /home/hiyuh/git-repos/nvc/src/nvc() [0x100da810]
+ /home/hiyuh/git-repos/nvc/src/nvc(lib_find+0x30) [0x100daf80]
+ /home/hiyuh/git-repos/nvc/src/nvc() [0x10123624]
+ /home/hiyuh/git-repos/nvc/src/nvc() [0x101237ec]
+ /home/hiyuh/git-repos/nvc/src/nvc(_image+0x3c) [0x1012169c]
+ [0x480320b0]
+ /home/hiyuh/git-repos/nvc/src/nvc() [0x101226b0]
+ /home/hiyuh/git-repos/nvc/src/nvc() [0x10123274]
+ /home/hiyuh/git-repos/nvc/src/nvc(rt_batch_exec+0x60) [0x10123ef8]
+ /home/hiyuh/git-repos/nvc/src/nvc() [0x100da264]
+ /home/hiyuh/git-repos/nvc/src/nvc(main+0x1c0) [0x100da784]
+ /lib/libc.so.6(+0x23110) [0xf9b5110]
+ /lib/libc.so.6(+0x232a0) [0xf9b52a0]
+ -----------------------------
+ [SNIP]
+
+ $ cd test
+ $ ./run_regr.sh all image
+ > analyze
+ >> analyze regress/image.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/image.vhd
+ > elaborate
+ >> elaborate image
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e image
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.IMAGE.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.IMAGE.elab.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.P-body.bc
+ > run
+ >> run image
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r image
+
+ *** Caught signal 11 (SIGSEGV) [address=(nil), ip=0xfa1d110] ***
+
+ -------- STACK TRACE --------
+ /lib/libc.so.6(strlen+0xc) [0xfa1d110]
+ [0x2cd]
+ ../src/nvc() [0x100da810]
+ ../src/nvc(lib_find+0x30) [0x100daf80]
+ ../src/nvc() [0x10123624]
+ ../src/nvc() [0x101237ec]
+ ../src/nvc(_image+0x3c) [0x1012169c]
+ [0x480320b0]
+ ../src/nvc() [0x101226b0]
+ ../src/nvc() [0x10123274]
+ ../src/nvc(rt_batch_exec+0x60) [0x10123ef8]
+ ../src/nvc() [0x100da264]
+ ../src/nvc(main+0x1c0) [0x100da784]
+ /lib/libc.so.6(+0x23110) [0xf9b5110]
+ /lib/libc.so.6(+0x232a0) [0xf9b52a0]
+ -----------------------------
+
+ $ NVC_LIBPATH=../lib/std:../lib/ieee gdb ../src/nvc
+ GNU gdb (Gentoo 7.4 p1) 7.4
+ Copyright (C) 2012 Free Software Foundation, Inc.
+ License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+ This is free software: you are free to change and redistribute it.
+ There is NO WARRANTY, to the extent permitted by law.  Type "show copying"
+ and "show warranty" for details.
+ This GDB was configured as "powerpc-unknown-linux-gnu".
+ For bug reporting instructions, please see:
+ <http://bugs.gentoo.org/>...
+ Reading symbols from /home/hiyuh/git-repos/nvc/src/nvc...done.
+ (gdb) r -r image
+ Starting program: /home/hiyuh/git-repos/nvc/src/nvc -r image
+ [Thread debugging using libthread_db enabled]
+ Using host libthread_db library "/lib/libthread_db.so.1".
+
+ Program received signal SIGSEGV, Segmentation fault.
+ 0x0fa1d110 in strlen () from /lib/libc.so.6
+ (gdb) bt
+ #0  0x0fa1d110 in strlen () from /lib/libc.so.6
+ #1  0x0fa1cd5c in *__GI___strdup (s=0x0) at strdup.c:42
+ #2  0x100da810 in upcase_name (name=0x0) at lib.c:59
+ #3  0x100daf80 in lib_find (name=0x0, verbose=true, search=true) at lib.c:175
+ #4  0x10123624 in rt_load_unit (name=0x10a4f010 "") at rtkern.c:801
+ #5  0x101237ec in rt_recall_tree (unit=0x10a4f010 "", where=279254640) at rtkern.c:834
+ #6  0x1012169c in _image (val=873087049740, where=279254640, module=0x10a4f010 "") at rtkern.c:383
+ #7  0x480320b0 in ?? ()
+ #8  0x101226b0 in rt_run (proc=0x0, reset=false) at rtkern.c:584
+ Backtrace stopped: previous frame inner to this frame (corrupt stack?)
+ (gdb) f 6
+ #6  0x1012169c in _image (val=873087049740, where=279254640, module=0x10a4f010 "") at rtkern.c:383
+ 383        tree_t t = rt_recall_tree(module, where);
+ (gdb) list
+ 378           memcpy((char *)dst + (off * sz), src, n * sz);
+ 379     }
+ 380
+ 381     struct uarray _image(int64_t val, int32_t where, const char *module)
+ 382     {
+ 383        tree_t t = rt_recall_tree(module, where);
+ 384
+ 385        type_t type = tree_type(t);
+ 386        while (type_kind(type) == T_SUBTYPE)
+ 387           type = type_base(type);
+ (gdb) q
+ A debugging session is active.
+
+         Inferior 1 [process 27221] will be killed.
+
+ Quit anyway? (y or n) y
+
+I'd have to say it's really weird, "const char *module" points to empty string,
+and frame 7 looks being corrupted, but it works fine on i686-cygwin!
+
+After doing "llvm-dis _WORK.IMAGE.final.bc" on both arch I have, "diff -u" shows:
+
+ --- work/_WORK.IMAGE.final.i686-cygwin.ll	2012-03-22 17:52:51.062500000 +0900
+ +++ work/_WORK.IMAGE.final.ppc32-linux.ll	2012-03-22 17:42:19.484375000 +0900
+ @@ -36,9 +36,9 @@
+    %downto = icmp eq i8 %dir, 1
+    %left = extractvalue { i8*, i32, i32, i8 } %3, 1
+    %right = extractvalue { i8*, i32, i32, i8 } %3, 2
+ -  %4 = sub i32 %right, %left
+ -  %5 = sub i32 %left, %right
+ -  %diff = select i1 %downto, i32 %5, i32 %4
+ +  %4 = sub i32 %left, %right
+ +  %5 = sub i32 %right, %left
+ +  %diff = select i1 %downto, i32 %4, i32 %5
+    %len = add i32 %diff, 1
+    %negative = icmp slt i32 %len, 0
+    %len_clamp = select i1 %negative, i32 0, i32 %len
+ @@ -49,9 +49,9 @@
+    %downto3 = icmp eq i8 %dir2, 1
+    %left4 = extractvalue { i8*, i32, i32, i8 } %6, 1
+    %right5 = extractvalue { i8*, i32, i32, i8 } %6, 2
+ -  %7 = sub i32 %right5, %left4
+ -  %8 = sub i32 %left4, %right5
+ -  %diff6 = select i1 %downto3, i32 %8, i32 %7
+ +  %7 = sub i32 %left4, %right5
+ +  %8 = sub i32 %right5, %left4
+ +  %diff6 = select i1 %downto3, i32 %7, i32 %8
+    %len7 = add i32 %diff6, 1
+    %negative8 = icmp slt i32 %len7, 0
+    %len_clamp9 = select i1 %negative8, i32 0, i32 %len7
+ @@ -63,9 +63,9 @@
+    %downto12 = icmp eq i8 %dir11, 1
+    %left13 = extractvalue { i8*, i32, i32, i8 } %9, 1
+    %right14 = extractvalue { i8*, i32, i32, i8 } %9, 2
+ -  %10 = sub i32 %right14, %left13
+ -  %11 = sub i32 %left13, %right14
+ -  %diff15 = select i1 %downto12, i32 %11, i32 %10
+ +  %10 = sub i32 %left13, %right14
+ +  %11 = sub i32 %right14, %left13
+ +  %diff15 = select i1 %downto12, i32 %10, i32 %11
+    %len16 = add i32 %diff15, 1
+    %negative17 = icmp slt i32 %len16, 0
+    %len_clamp18 = select i1 %negative17, i32 0, i32 %len16
+ @@ -77,9 +77,9 @@
+    %downto20 = icmp eq i8 %dir19, 1
+    %left21 = extractvalue { i8*, i32, i32, i8 } %14, 1
+    %right22 = extractvalue { i8*, i32, i32, i8 } %14, 2
+ -  %15 = sub i32 %right22, %left21
+ -  %16 = sub i32 %left21, %right22
+ -  %diff23 = select i1 %downto20, i32 %16, i32 %15
+ +  %15 = sub i32 %left21, %right22
+ +  %16 = sub i32 %right22, %left21
+ +  %diff23 = select i1 %downto20, i32 %15, i32 %16
+    %len24 = add i32 %diff23, 1
+    %negative25 = icmp slt i32 %len24, 0
+    %len24.op.op.op.op.op.op.op.op = add i32 %diff23, 9
+ @@ -93,9 +93,9 @@
+    %downto28 = icmp eq i8 %dir27, 1
+    %left29 = extractvalue { i8*, i32, i32, i8 } %21, 1
+    %right30 = extractvalue { i8*, i32, i32, i8 } %21, 2
+ -  %22 = sub i32 %right30, %left29
+ -  %23 = sub i32 %left29, %right30
+ -  %diff31 = select i1 %downto28, i32 %23, i32 %22
+ +  %22 = sub i32 %left29, %right30
+ +  %23 = sub i32 %right30, %left29
+ +  %diff31 = select i1 %downto28, i32 %22, i32 %23
+    %len32 = add i32 %diff31, 1
+    %negative33 = icmp slt i32 %len32, 0
+    %len32.op.op.op = add i32 %diff31, 3
+ @@ -111,9 +111,9 @@
+    %downto43 = icmp eq i8 %dir39, 1
+    %left44 = extractvalue { i8*, i32, i32, i8 } %28, 1
+    %right45 = extractvalue { i8*, i32, i32, i8 } %28, 2
+ -  %29 = sub i32 %right45, %left44
+ -  %30 = sub i32 %left44, %right45
+ -  %diff46 = select i1 %downto43, i32 %30, i32 %29
+ +  %29 = sub i32 %left44, %right45
+ +  %30 = sub i32 %right45, %left44
+ +  %diff46 = select i1 %downto43, i32 %29, i32 %30
+    %len47 = add i32 %diff46, 1
+    %negative48 = icmp slt i32 %len47, 0
+    %len_clamp49 = select i1 %negative48, i32 0, i32 %len47
+ @@ -132,9 +132,9 @@
+    %downto87 = icmp eq i8 %dir86, 1
+    %left88 = extractvalue { i8*, i32, i32, i8 } %31, 1
+    %right89 = extractvalue { i8*, i32, i32, i8 } %31, 2
+ -  %32 = sub i32 %right89, %left88
+ -  %33 = sub i32 %left88, %right89
+ -  %diff90 = select i1 %downto87, i32 %33, i32 %32
+ +  %32 = sub i32 %left88, %right89
+ +  %33 = sub i32 %right89, %left88
+ +  %diff90 = select i1 %downto87, i32 %32, i32 %33
+    %len91 = add i32 %diff90, 1
+    %negative92 = icmp slt i32 %len91, 0
+    %len_clamp93 = select i1 %negative92, i32 0, i32 %len91
+ @@ -145,9 +145,9 @@
+    %downto.i = icmp eq i8 %dir.i, 1
+    %left.i = extractvalue { i8*, i32, i32, i8 } %34, 1
+    %right.i = extractvalue { i8*, i32, i32, i8 } %34, 2
+ -  %35 = sub i32 %right.i, %left.i
+ -  %36 = sub i32 %left.i, %right.i
+ -  %diff.i = select i1 %downto.i, i32 %36, i32 %35
+ +  %35 = sub i32 %left.i, %right.i
+ +  %36 = sub i32 %right.i, %left.i
+ +  %diff.i = select i1 %downto.i, i32 %35, i32 %36
+    %len.i = add i32 %diff.i, 1
+    %negative.i = icmp slt i32 %len.i, 0
+    %len_clamp.i = select i1 %negative.i, i32 0, i32 %len.i
+ @@ -165,9 +165,9 @@
+    %downto = icmp eq i8 %dir, 1
+    %left = extractvalue { i8*, i32, i32, i8 } %2, 1
+    %right = extractvalue { i8*, i32, i32, i8 } %2, 2
+ -  %3 = sub i32 %right, %left
+ -  %4 = sub i32 %left, %right
+ -  %diff = select i1 %downto, i32 %4, i32 %3
+ +  %3 = sub i32 %left, %right
+ +  %4 = sub i32 %right, %left
+ +  %diff = select i1 %downto, i32 %3, i32 %4
+    %len = add i32 %diff, 1
+    %negative = icmp slt i32 %len, 0
+    %len_clamp = select i1 %negative, i32 0, i32 %len
+
+The arguments are wrongly swapped, it seems...
+Is it a LLVM bug? Or, a NVC's fault?
