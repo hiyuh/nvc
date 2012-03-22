@@ -1,10 +1,26 @@
--------------------------
-Port to clang and clang++
--------------------------
-Bad news, clang doesn't support -I-.
+-----------------------------------
+Port to clang/clang++ on cygwin
+-----------------------------------
+Bad news, clang/clang++ doesn't support -I-.
 It's time to override by DEFAULT_INCLUDES.
 
 After setting DEFAULT_INCLUDES by -iquote, "make -k" shows:
+
+ $ uname -a
+ CYGWIN_NT-5.1 lion 1.7.10(0.259/5/3) 2012-02-05 12:36 i686 Cygwin
+
+ $ clang --version
+ clang version 3.0 (tags/RELEASE_30/final)
+ Target: i386-pc-cygwin
+ Thread model: posix
+
+ $ clang++ --version
+ clang version 3.0 (tags/RELEASE_30/final)
+ Target: i386-pc-cygwin
+ Thread model: posix
+
+ $ CC=clang CXX=clang++ ./configure
+ [SNIP]
 
  $ make -k
  [SNIP]
@@ -54,6 +70,8 @@ After setting DEFAULT_INCLUDES by -iquote, "make -k" shows:
  7 errors generated.
  Makefile:384: recipe for target `lib.o' failed
  [SNIP]
+
+These errors may be cygwin specific and are caused by clang/clang++'s bug, I think.
 
 ------------------------------------------------------------------------------------------
 Fix "*** glibc detected *** path/to/nvc : double free or corruption (out): 0xXXXXXXXX ***"
