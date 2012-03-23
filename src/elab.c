@@ -139,14 +139,11 @@ static void elab_map(tree_t t, tree_t arch,
    tree_t unit = tree_ref(t);
    assert(tree_kind(unit) == T_ENTITY);
 
-   // The map is processed in reverse order as generics may refer
-   // to earlier ones which would have already been rewritten
-
    bool have_formals[tree_Fs(unit)];
    for (unsigned i = 0; i < tree_Fs(unit); i++)
       have_formals[i] = false;
 
-   for (int i = tree_As(t) - 1; i >= 0; i--) {
+   for (unsigned i = 0; i < tree_As(t); i++) {
       param_t p = tree_A(t, i);
       tree_t formal = NULL;
 
@@ -172,14 +169,28 @@ static void elab_map(tree_t t, tree_t arch,
 
       struct rewrite_params params = {
          .formal = formal,
-         .actual = tree_ref(p.value)
+         .actual = NULL
       };
-      tree_rewrite(arch, rewrite_ports, &params);
 
-      elab_add_alias(arch, p.value, tree_ident(formal));
+      switch (tree_class(formal)) {
+      case C_SIGNAL:
+         params.actual = tree_ref(p.value);
+         elab_add_alias(arch, p.value, tree_ident(formal));
+         break;
+
+      case C_CONSTANT:
+         params.actual = p.value;
+         break;
+
+      default:
+         assert(false);
+      }
+
+      tree_rewrite(arch, rewrite_ports, &params);
    }
 
-   for (int i = tree_Fs(unit) - 1; i >= 0; i--) {
+   // Assign default values
+   for (unsigned i = 0; i < tree_Fs(unit); i++) {
       if (!have_formals[i]) {
          tree_t f = tree_F(unit, i);
          assert(tree_has_value(f));
