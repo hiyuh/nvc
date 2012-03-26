@@ -42,31 +42,34 @@ eeval() {
 	eval $* ;
 }
 
-# NOTE: analyze() does analyze VHDL file given by 1st argument using NVC.
+# NOTE: analyze() does analyze VHDL file given by 1st argument using NVC
+#       with EXTRA_AFLAGS.
 analyze() {
-	eeval ${NVC} -a $1 ;
+	eeval ${NVC} -a ${EXTRA_AFLAGS} $1 ;
 }
 
-# NOTE: elaborate() does elaborate VHDL unit given by 1st argument using NVC.
+# NOTE: elaborate() does elaborate VHDL unit given by 1st argument using
+#       NVC with EXTRA_EFLAGS.
 elaborate() {
-	eeval ${NVC} -e $1 ;
+	eeval ${NVC} -e ${EXTRA_EFLAGS} $1 ;
 }
 
-# NOTE: run() does run VHDL unit given by 1st argument using NVC.
+# NOTE: run() does run VHDL unit given by 1st argument using NVC with
+#       EXTRA_RFLAGS.
 #       --stop-time option is generated from the given unit name, if required.
 # FIXME: Generate --stop-time from regress/testlist.txt.
 # FIXME: IMHO, regression should not have requirement to specify --stop-time,
 #        except testing --stop-time functionality itself.
 # FIXME: Implement expectation collation w/ regress/gold, if required.
 run() {
-	local o ;
+	local RFLAGS ;
 	case $1 in
-		counter) o="--stop-time=50ns"  ; ;;
-		lfsr)    o="--stop-time=510ns" ; ;;
-		ieee2)   o="--stop-time=15ns"  ; ;;
-		*)       o=""                  ; ;;
+		counter) RFLAGS="--stop-time=50ns"  ; ;;
+		lfsr)    RFLAGS="--stop-time=510ns" ; ;;
+		ieee2)   RFLAGS="--stop-time=15ns"  ; ;;
+		*)       RFLAGS=""                  ; ;;
 	esac ;
-	eeval ${NVC} -r $1 ${o} ;
+	eeval ${NVC} -r ${RFLAGS} ${EXTRA_RFLAGS} $1 ;
 }
 
 case $1 in
