@@ -37,9 +37,17 @@
 
 typedef void (*proc_fn_t)(int32_t reset);
 
-struct tmp_chunk {
+struct tmp_chunk_hdr {
    struct tmp_chunk *next;
-   void             *ptr;
+   size_t alloced;
+   char   *external;
+};
+
+#define TMP_BUF_SZ (1024 - sizeof(struct tmp_chunk_hdr))
+
+struct tmp_chunk {
+   struct tmp_chunk_hdr hdr;
+   char buf[TMP_BUF_SZ];
 };
 
 struct rt_proc {
@@ -133,7 +141,7 @@ static void *rt_tmp_alloc(size_t sz);
 static tree_t rt_recall_tree(const char *unit, int32_t where);
 static void _tracef(const char *fmt, ...);
 
-#define TRACE(...) if (trace_on) _tracef(__VA_ARGS__)
+#define TRACE(...) if (unlikely(trace_on)) _tracef(__VA_ARGS__)
 
 ////////////////////////////////////////////////////////////////////////////////
 // Utilities
@@ -205,10 +213,10 @@ void _sched_waveform_vec(void *_sig, int32_t source, void *values,
    TRACE("_sched_waveform_vec %s source=%d values=%p n=%d size=%d after=%s",
          fmt_sig(sig), source, values, n, size, fmt_time(after));
 
-   const uint8_t  *restrict v8  = values;
-   const uint16_t *restrict v16 = values;
-   const uint32_t *restrict v32 = values;
-   const uint64_t *restrict v64 = values;
+   const uint8_t  *v8  = values;
+   const uint16_t *v16 = values;
+   const uint32_t *v32 = values;
+   const uint64_t *v64 = values;
 
    switch (size) {
       case 1:
@@ -491,12 +499,32 @@ static void deltaq_dump(void)
 static void *rt_tmp_alloc(size_t sz)
 {
    // Allocate sz bytes that will be freed when the process suspends
-   struct tmp_chunk *c = rt_alloc(tmp_chunk_stack);
-   c->ptr  = xmalloc(sz);
-   c->next = active_proc->tmp_chunks;
 
-   active_proc->tmp_chunks = c;
-   return c->ptr;
+   struct tmp_chunk *c = active_proc->tmp_chunks;
+
+   bool reuse =
+      (c != NULL)
+      && (TMP_BUF_SZ - c->hdr.alloced >= sz)
+      && (c->hdr.external == NULL);
+
+   if (likely(reuse)) {
+      char *ptr = c->buf + c->hdr.alloced;
+      c->hdr.alloced += sz;
+      return ptr;
+   }
+   else {
+      c = rt_alloc(tmp_chunk_stack);
+      c->hdr.alloced  = sz;
+      c->hdr.external = NULL;
+      c->hdr.next     = active_proc->tmp_chunks;
+
+      active_proc->tmp_chunks = c;
+
+      if (likely(sz <= TMP_BUF_SZ))
+         return c->buf;
+      else
+         return (c->hdr.external = xmalloc(sz));
+   }
 }
 
 static void rt_reset_signal(struct signal *s, tree_t decl, int offset)
@@ -587,8 +615,9 @@ static void rt_run(struct rt_proc *proc, bool reset)
    // Free any temporary memory allocated by the process
    while (proc->tmp_chunks) {
       struct tmp_chunk *n = proc->tmp_chunks;
-      proc->tmp_chunks = n->next;
-      free(n->ptr);
+      proc->tmp_chunks = n->hdr.next;
+      if (n->hdr.external != NULL)
+         free(n->hdr.external);
       rt_free(tmp_chunk_stack, n);
    }
 }
@@ -674,7 +703,7 @@ static void rt_update_signal(struct signal *s, int source, uint64_t value)
 
    int32_t new_flags = 0;
    const bool first_cycle = (iteration == 0 && now == 0);
-   if (!first_cycle) {
+   if (likely(!first_cycle)) {
       new_flags = SIGNAL_F_ACTIVE;
       if (s->resolved != value) {
          new_flags |= SIGNAL_F_EVENT;
@@ -703,7 +732,7 @@ static void rt_update_signal(struct signal *s, int source, uint64_t value)
    // LAST_VALUE is the same as the initial value when
    // there have been no events on the signal otherwise
    // only update it when there is an event
-   if (first_cycle)
+   if (unlikely(first_cycle))
       s->last_value = value;
    else if (new_flags & SIGNAL_F_EVENT)
       s->last_value = s->resolved;

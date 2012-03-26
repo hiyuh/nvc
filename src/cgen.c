@@ -208,7 +208,7 @@ static LLVMTypeRef llvm_type(type_t t)
    case T_CARRAY:
    case T_UARRAY:
       {
-         if (type_kind(t) == T_CARRAY && cgen_const_bounds(t)) {
+         if (cgen_const_bounds(t)) {
             int nelems = 1;
             for (unsigned i = 0; i < type_dims(t); i++) {
                int64_t low, high;
@@ -264,9 +264,12 @@ static bool cgen_is_const(tree_t t)
 
 static bool cgen_const_bounds(type_t type)
 {
-   assert(type_kind(type) == T_CARRAY);
-   range_t r = type_dim(type, 0);
-   return cgen_is_const(r.left) && cgen_is_const(r.right);
+   if (type_kind(type) == T_UARRAY)
+      return false;
+   else {
+      range_t r = type_dim(type, 0);
+      return cgen_is_const(r.left) && cgen_is_const(r.right);
+   }
 }
 
 static class_t cgen_get_class(tree_t decl)
@@ -319,7 +322,7 @@ static LLVMValueRef cgen_uarray_low(LLVMValueRef array)
 
 static LLVMValueRef cgen_array_dir(type_t type, LLVMValueRef var)
 {
-   if (type_kind(type) == T_UARRAY || !cgen_const_bounds(type))
+   if (!cgen_const_bounds(type))
       return LLVMBuildExtractValue(builder, var, 3, "dir");
    else
       return llvm_int8(type_dim(type, 0).kind);
@@ -327,7 +330,7 @@ static LLVMValueRef cgen_array_dir(type_t type, LLVMValueRef var)
 
 static LLVMValueRef cgen_array_left(type_t type, LLVMValueRef var)
 {
-   if (type_kind(type) == T_UARRAY || !cgen_const_bounds(type))
+   if (!cgen_const_bounds(type))
       return LLVMBuildExtractValue(builder, var, 1, "left");
    else
       return llvm_int32(assume_int(type_dim(type, 0).left));
@@ -335,7 +338,7 @@ static LLVMValueRef cgen_array_left(type_t type, LLVMValueRef var)
 
 static LLVMValueRef cgen_array_right(type_t type, LLVMValueRef var)
 {
-   if (type_kind(type) == T_UARRAY || !cgen_const_bounds(type))
+   if (!cgen_const_bounds(type))
       return LLVMBuildExtractValue(builder, var, 2, "right");
    else
       return llvm_int32(assume_int(type_dim(type, 0).right));
@@ -343,7 +346,7 @@ static LLVMValueRef cgen_array_right(type_t type, LLVMValueRef var)
 
 static LLVMValueRef cgen_array_len(type_t type, LLVMValueRef data)
 {
-   if (type_kind(type) == T_CARRAY && cgen_const_bounds(type)) {
+   if (cgen_const_bounds(type)) {
       int n_elems = 1;
       for (unsigned i = 0; i < type_dims(type); i++) {
          int64_t low, high;
@@ -462,7 +465,7 @@ static LLVMValueRef cgen_array_off(LLVMValueRef off, LLVMValueRef array,
    // Convert VHDL offset 'off' to a zero-based LLVM array offset
 
    LLVMValueRef low;
-   if (type_kind(type) == T_UARRAY || !cgen_const_bounds(type)) {
+   if (!cgen_const_bounds(type)) {
       assert(array != NULL);
       low = cgen_uarray_low(array);
    }
@@ -512,7 +515,7 @@ static void cgen_array_copy(type_t src_type, type_t dest_type,
 
    LLVMValueRef ll_n_elems = cgen_array_len(src_type, src);
 
-   if (type_kind(dest_type) == T_UARRAY || !cgen_const_bounds(dest_type))
+   if (!cgen_const_bounds(dest_type))
       dst = cgen_array_data_ptr(dest_type, dst);
 
    LLVMValueRef src_ptr = cgen_array_data_ptr(src_type, src);
@@ -769,14 +772,12 @@ static void cgen_call_args(tree_t t, LLVMValueRef *args, struct cgen_ctx *ctx)
             LLVMTypeRef ptr_type =
                LLVMPointerType(llvm_type(type_base(type)), 0);
 
-            LLVMValueRef fields[] = {
-               LLVMBuildPointerCast(builder, args[i], ptr_type, ""),
+            args[i] = cgen_array_meta(
+               type,
                llvm_int32(assume_int(r.left)),
                llvm_int32(assume_int(r.right)),
-               llvm_int8(r.kind)
-            };
-
-            args[i] = LLVMConstStruct(fields, ARRAY_LEN(fields), false);
+               llvm_int8(r.kind),
+               LLVMBuildPointerCast(builder, args[i], ptr_type, ""));
          }
       }
    }
@@ -1014,8 +1015,7 @@ static LLVMValueRef cgen_fcall(tree_t t, struct cgen_ctx *ctx)
                              LLVMConstInt(llvm_type(arg_type), dir, false), "");
       }
       else if (icmp(builtin, "length")) {
-         assert(type_kind(arg_type) == T_UARRAY
-                || !cgen_const_bounds(arg_type));
+         assert(!cgen_const_bounds(arg_type));
          return cgen_array_len(arg_type, args[0]);
       }
       else if (icmp(builtin, "uarray_left")) {
@@ -1125,7 +1125,7 @@ static LLVMValueRef cgen_ref(tree_t t, struct cgen_ctx *ctx)
 
 static LLVMValueRef cgen_array_data_ptr(type_t type, LLVMValueRef var)
 {
-   if (type_kind(type) == T_UARRAY || !cgen_const_bounds(type)) {
+   if (!cgen_const_bounds(type)) {
       // Unwrap array to get data pointer
       // TODO: insert bounds checking here
       return LLVMBuildExtractValue(builder, var, 0, "aptr");
@@ -1496,10 +1496,32 @@ static LLVMValueRef cgen_concat(tree_t t, struct cgen_ctx *ctx)
       cgen_expr(args[1], ctx)
    };
 
-   cgen_array_copy(tree_type(args[0]), tree_type(t), args_ll[0], var, NULL);
+   type_kind_t lkind = type_kind(tree_type(args[0]));
+   type_kind_t rkind = type_kind(tree_type(args[1]));
 
-   LLVMValueRef off = cgen_array_len(tree_type(args[0]), args_ll[0]);
-   cgen_array_copy(tree_type(args[1]), tree_type(t), args_ll[1], var, off);
+   LLVMValueRef off = NULL;
+   type_t type = tree_type(t);
+
+   if (lkind == T_CARRAY || lkind == T_UARRAY) {
+      cgen_array_copy(tree_type(args[0]), type, args_ll[0], var, NULL);
+      off = cgen_array_len(tree_type(args[0]), args_ll[0]);
+   }
+   else {
+      LLVMValueRef zero = llvm_int32(0);
+      LLVMValueRef data = cgen_array_data_ptr(type, var);
+      LLVMValueRef ptr = LLVMBuildGEP(builder, data, &zero, 1, "");
+      LLVMBuildStore(builder, args_ll[0], ptr);
+
+      off = llvm_int32(1);
+   }
+
+   if (rkind == T_CARRAY || rkind == T_UARRAY)
+      cgen_array_copy(tree_type(args[1]), type, args_ll[1], var, off);
+   else {
+      LLVMValueRef data = cgen_array_data_ptr(type, var);
+      LLVMValueRef ptr = LLVMBuildGEP(builder, data, &off, 1, "");
+      LLVMBuildStore(builder, args_ll[1], ptr);
+   }
 
    return var;
 }
