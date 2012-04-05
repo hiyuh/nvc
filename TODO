@@ -80,12 +80,13 @@ This "double free or corruption" occurs on Gentoo/PowerPC.
 
 Investigating w/ LLVM-3.0 and svn trunk and great helping by NAKAMURA Takumi AKA chapuni,
 I finally realized that this problem can be reproduced when using altivec on ppc32-linux.
-The point is, LLVM has incomplete support for altivec on ppc-linux, even w/ svn trunk.
+The point is, LLVM has incomplete support for altivec on ppc32-linux, even w/ svn trunk.
 And the workaround is, don't enable altivec when compiling LLVM.
 
 So appending "-mno-altivec -mabi=no-altivec" to CFLAGS and CXXFLAGS can avoid this issue.
 Note, -mcpu and -mtune does enable/disable altivec related flags too, so just replacing
-only "-maltivec -mabi=altivec" to "-mno-altivec -mabi=no-altivec" may not work as expected.
+only "-maltivec -mabi=altivec" to "-mno-altivec -mabi=no-altivec" may not work as expected
+if you used -mcpu and -mtune.
 
 FYI, I filed a bug also for TEXTREL:
 
@@ -110,6 +111,7 @@ See more detail:
 
  $ git clone git://github.com/hiyuh/nvc.git
  [SNIP]
+ $ cd nvc
  $ ./autogen.sh
  [SNIP]
  $ ./configure
