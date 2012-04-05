@@ -88,7 +88,7 @@ Note, -mcpu and -mtune does enable/disable altivec related flags too, so just re
 only "-maltivec -mabi=altivec" to "-mno-altivec -mabi=no-altivec" may not work as expected
 if you used -mcpu and -mtune.
 
-FYI, I filed a bug also for TEXTREL:
+FYI, I filed a bug also for TEXTREL and Anton Korobeynikov AKA asl fixed in r15398:
 
 https://bugs.gentoo.org/show_bug.cgi?id=403519
 
