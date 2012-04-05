@@ -388,6 +388,7 @@ void _array_copy(void *dst, const void *src,
 
 struct uarray _image(int64_t val, int32_t where, const char *module)
 {
+   TRACE("_image val=%"PRIx64" where=%d module=\"%s\"", val, where, module);
    tree_t t = rt_recall_tree(module, where);
 
    type_t type = tree_type(t);
