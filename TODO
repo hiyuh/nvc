@@ -618,6 +618,26 @@ I don't know why modele is null, and nickg also has no idea.
 
 https://github.com/hiyuh/nvc/commit/931c8731d53ac925aa3c5a3703d622db6166cc34#commitcomment-1126798
 
+Also, on i686-cygwin, it works fine.
+
+ $ uname -a
+ CYGWIN_NT-5.1 lion 1.7.11(0.260/5/3) 2012-02-24 14:05 i686 Cygwin
+
+ $ EXTRA_RFLAGS="--trace" ./run_regr.sh run reduced_image
+ > run
+ >> run reduced_image
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r --trace reduced_image
+ TRACE (init): process :reduced_image(test):_proc at 0x7ff30010
+ TRACE (init): reset process :reduced_image(test):_proc
+ TRACE (init): _sched_process delay=0ms
+ TRACE 0ms+0: begin cycle
+ 0ms     process  :reduced_image(test):_proc
+ TRACE 0ms+0: run process :reduced_image(test):_proc
+ TRACE 0ms+0: _image val=4 where=200 module="WORK.REDUCED_IMAGE.elab"
+ TRACE 0ms+0: _assert_fail msg=4 msg_len=1 severity=0 where=2 module=WORK.REDUCED_IMAGE.elab
+ ** Note: 0ms+0: Report Note: 4
+         File regress/reduced_image.vhd, Line 9
+
 So I'd have to say this is a LLVM bug itself.
 To investigate more detail, do llvm-dis reduced regression's bitcode,
 
@@ -668,12 +688,7 @@ Now we get following LLVM IR named work/_WORK.REDUCED_IMAGE.final.ll,
  41 }
 
 Where something goes wrong is line 26, I guess.
-According to "LLVM Language Reference Manual",
+ppc32-linux has completely unexpected TRACE output, maybe "call" is broken?
 
- http://llvm.org/docs/LangRef.html#i_getelementptr
- "Overview:
-  The 'getelementptr' instruction is used to get the address of a subelement of an aggregate data structure.
-  It performs address calculation only and does not access memory."
-
-Yes, getelementptr does not access memory.
-But it might calculate invalid address from @module_name, so that SIGSEGV occurs inside @_image().
+ ppc32-linux > TRACE 0ms+0: _image val=c8480b2010 where=1208754184 module="(null)"
+ i686-cygwin > TRACE 0ms+0: _image val=4 where=200 module="WORK.REDUCED_IMAGE.elab"
