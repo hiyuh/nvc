@@ -692,3 +692,157 @@ ppc32-linux has completely unexpected TRACE output, maybe "call" is broken?
 
  ppc32-linux > TRACE 0ms+0: _image val=c8480b2010 where=1208754184 module="(null)"
  i686-cygwin > TRACE 0ms+0: _image val=4 where=200 module="WORK.REDUCED_IMAGE.elab"
+
+-----------------------------------------------------------------------
+Fix "nvc: tree.c:372: tree_ident: Assertion `t != ((void *)0)' failed."
+-----------------------------------------------------------------------
+Like above _image() issue, _inst_name() doesn't work on ppc32-linux.
+
+See more detail:
+
+ $ uname -a
+ Linux wombat 3.3.1-gentoo #1 Thu Apr 5 17:30:06 JST 2012 ppc 7447A, altivec supported PowerMac10,2 GNU/Linux
+
+ $ eix -Ic sys-devel/llvm
+ [I] sys-devel/llvm (9999@04/06/12): Low Level Virtual Machine
+ [NOTE: This sys-devel/llvm-9999 is compiled w/;
+           CFLAGS="-O2 -mtune=G4 -mcpu=G4 -maltivec -mabi=altivec -Wall -fno-strict-aliasing -mno-altivec -mabi=no-altivec -ggdb"
+         CXXFLAGS="-O2 -mtune=G4 -mcpu=G4 -maltivec -mabi=altivec -Wall -fno-strict-aliasing -mno-altivec -mabi=no-altivec -ggdb"
+          LDFLAGS="-Wl,-O1 -Wl,--as-needed"
+        to workaround LLVM's altivec bug.]
+
+ $ llvm-config --version
+ 3.1svn
+ [NOTE: This sys-devel/llvm-999 is live svn ebuild.
+        ATM, used svn trunk tells me it is r154158.]
+
+ $ git clone git://github.com/hiyuh/nvc.git
+ [SNIP]
+ $ cd nvc
+ $ ./autogen.sh
+ [SNIP]
+ $ CFLAGS="-O0 -ggdb" CXXFLAGS="-O0 -ggdb" ./configure
+ [SNIP]
+ [NOTE: Prepare lib/ieee before make. :P]
+ $ make
+ [SNIP]
+ $ make check
+ [SNIP]
+           elab3 : failed
+ /home/hiyuh/git-repos/nvc/src/nvc -a /home/hiyuh/git-repos/nvc/test/regress/elab3.vhd
+ /home/hiyuh/git-repos/nvc/src/nvc -e elab3
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/logs/elab3/work/_WORK.ELAB3.final.bc /home/hiyuh/git-repos/nvc/test/logs/elab3/work/_WORK.ELAB3.elab.bc
+ /home/hiyuh/git-repos/nvc/src/nvc -r  elab3
+ nvc: tree.c:372: tree_ident: Assertion `t != ((void *)0)' failed.
+ Aborted
+ [SNIP]
+
+ $ cd test
+ $ EXTRA_RFLAGS="--trace" ./run_regr.sh all elab3
+ > analyze
+ >> analyze regress/elab3.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/elab3.vhd
+ > elaborate
+ >> elaborate elab3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e elab3
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.ELAB3.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.ELAB3.elab.bc
+ > run
+ >> run elab3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r --trace elab3
+ TRACE (init): signal :elab3(test):x at 0x480b2010
+ TRACE (init): signal :elab3(test):s@sub(test):p at 0x480b2040
+ TRACE (init): signal :elab3(test):b:y at 0x480b2070
+ TRACE (init): process :elab3(test):s@sub(test):_proc at 0x48032010
+ TRACE (init): process :elab3(test):b:_proc0 at 0x48032140
+ TRACE (init): process :elab3(test):_proc1 at 0x48032270
+ TRACE (init): reset process :elab3(test):s@sub(test):_proc
+ TRACE (init): _sched_process delay=0ms
+ TRACE (init): reset process :elab3(test):b:_proc0
+ TRACE (init): _sched_process delay=0ms
+ TRACE (init): reset process :elab3(test):_proc1
+ TRACE (init): _sched_process delay=0ms
+ TRACE 0ms+0: begin cycle
+ 0ms     process  :elab3(test):s@sub(test):_proc
+ 0ms     process  :elab3(test):b:_proc0
+ 0ms     process  :elab3(test):_proc1
+ TRACE 0ms+0: run process :elab3(test):s@sub(test):_proc
+ TRACE 0ms+0: _sched_process delay=2ns
+ TRACE 0ms+0: run process :elab3(test):_proc1
+ nvc: tree.c:372: tree_ident: Assertion `t != ((void *)0)' failed.
+ Aborted
+
+Try reduced regression again,
+
+ $ EXTRA_RFLAGS="--trace" ./run_regr.sh all reduced_elab3
+ > analyze
+ >> analyze regress/reduced_elab3.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/reduced_elab3.vhd
+ > elaborate
+ >> elaborate reduced_elab3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e reduced_elab3
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_ELAB3.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_ELAB3.elab.bc
+ > run
+ >> run reduced_elab3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r --trace reduced_elab3
+ TRACE (init): signal :reduced_elab3(test):x at 0x480b2010
+ TRACE (init): process :reduced_elab3(test):_proc at 0x48032010
+ TRACE (init): reset process :reduced_elab3(test):_proc
+ TRACE (init): _sched_process delay=0ms
+ TRACE 0ms+0: begin cycle
+ 0ms     process  :reduced_elab3(test):_proc
+ TRACE 0ms+0: run process :reduced_elab3(test):_proc
+ nvc: tree.c:372: tree_ident: Assertion `t != ((void *)0)' failed.
+ Aborted
+
+To investigate more detail, do llvm-dis reduced regression's bitcode,
+
+ $ llvm-dis work/_WORK.REDUCED_ELAB3.final.bc
+
+Now we get following LLVM IR named work/_WORK.REDUCED_ELAB3.final.ll,
+
+  1 ; ModuleID = 'work/_WORK.REDUCED_ELAB3.final.bc'
+  2
+  3 %signal_s = type { i64, i64, i8*, i8, i8, i16, i8*, i8*, i8* }
+  4
+  5 @module_name = private global [24 x i8] c"WORK.REDUCED_ELAB3.elab\00"
+  6 @":reduced_elab3(test):x" = global %signal_s zeroinitializer
+  7 @":reduced_elab3(test):_proc__state.0" = internal unnamed_addr global i32 undef, align 8
+  8
+  9 declare void @_sched_process(i64)
+ 10
+ 11 declare void @_assert_fail(i8*, i32, i8, i32, i8*)
+ 12
+ 13 declare { i8*, i32, i32, i8 } @_inst_name(i8*)
+ 14
+ 15 define void @":reduced_elab3(test):_proc"(i32) {
+ 16 entry:
+ 17   %1 = icmp eq i32 %0, 0
+ 18   %2 = load i32* @":reduced_elab3(test):_proc__state.0", align 8
+ 19   %switch = icmp ult i32 %2, 2
+ 20   %or.cond = and i1 %1, %switch
+ 21   br i1 %or.cond, label %start, label %init
+ 22
+ 23 init:                                             ; preds = %entry
+ 24   call void @_sched_process(i64 0)
+ 25   store i32 0, i32* @":reduced_elab3(test):_proc__state.0", align 8
+ 26   ret void
+ 27
+ 28 start:                                            ; preds = %entry
+ 29   %3 = call { i8*, i32, i32, i8 } @_inst_name(i8* bitcast (%signal_s* @":reduced_elab3(test):x" to i8*))
+ 30   %aptr = extractvalue { i8*, i32, i32, i8 } %3, 0
+ 31   %dir = extractvalue { i8*, i32, i32, i8 } %3, 3
+ 32   %downto = icmp eq i8 %dir, 1
+ 33   %left = extractvalue { i8*, i32, i32, i8 } %3, 1
+ 34   %right = extractvalue { i8*, i32, i32, i8 } %3, 2
+ 35   %4 = sub i32 %left, %right
+ 36   %5 = sub i32 %right, %left
+ 37   %diff = select i1 %downto, i32 %4, i32 %5
+ 38   %len = add i32 %diff, 1
+ 39   %negative = icmp slt i32 %len, 0
+ 40   %len_clamp = select i1 %negative, i32 0, i32 %len
+ 41   call void @_assert_fail(i8* %aptr, i32 %len_clamp, i8 0, i32 198, i8* getelementptr inbounds ([24 x i8]* @module_name, i64    0, i64 0))
+ 42   store i32 1, i32* @":reduced_elab3(test):_proc__state.0", align 8
+ 43   ret void
+ 44 }
+
+Where something goes wrong is line 29, I guess.
