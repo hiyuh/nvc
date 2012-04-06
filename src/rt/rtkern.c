@@ -441,8 +441,7 @@ struct uarray _inst_name(void *_sig)
 {
    struct signal *sig = _sig;
 
-   TRACE("_inst_name %s proc %s", fmt_sig(sig),
-         istr(tree_ident(active_proc->source)));
+   TRACE("_inst_name sig=%s", fmt_sig(sig));
 
    const char *str = istr(tree_ident(sig->decl));
 
