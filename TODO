@@ -874,3 +874,11 @@ Now we get following LLVM IR named work/_WORK.REDUCED_ELAB3.final.ll,
  44 }
 
 Where something goes wrong is line 29, I guess.
+ppc32-linux has completely unexpected assertion, maybe "call" is broken?
+
+ ppc32-linux > nvc: tree.c:372: tree_ident: Assertion `t != ((void *)0)' failed.
+ i686-cygwin > TRACE 0ms+0: _inst_name sig=:reduced_elab3(test):x
+
+This assertion is triggered by tree_ident() that called by fmt_sig() for TRACE()
+in _inst_name().
+Maybe, the given argument to _inst_name(), _sig is invalid b/c "call" is broken?
