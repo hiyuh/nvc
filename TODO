@@ -794,6 +794,34 @@ Try reduced regression again,
  nvc: tree.c:372: tree_ident: Assertion `t != ((void *)0)' failed.
  Aborted
 
+Also on i686-cygwin, it works fine.
+
+ $ uname -a
+ CYGWIN_NT-5.1 lion 1.7.11(0.260/5/3) 2012-02-24 14:05 i686 Cygwin
+
+ $ EXTRA_RFLAGS="--trace" ./run_regr.sh all reduced_elab3
+ > analyze
+ >> analyze regress/reduced_elab3.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/reduced_elab3.vhd
+ > elaborate
+ >> elaborate reduced_elab3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e reduced_elab3
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_ELAB3.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_ELAB3.elab.bc
+ > run
+ >> run reduced_elab3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r --trace reduced_elab3
+ TRACE (init): signal :reduced_elab3(test):x at 0x7ff20010
+ TRACE (init): process :reduced_elab3(test):_proc at 0x7ff30010
+ TRACE (init): reset process :reduced_elab3(test):_proc
+ TRACE (init): _sched_process delay=0ms
+ TRACE 0ms+0: begin cycle
+ 0ms     process  :reduced_elab3(test):_proc
+ TRACE 0ms+0: run process :reduced_elab3(test):_proc
+ TRACE 0ms+0: _inst_name sig=:reduced_elab3(test):x
+ TRACE 0ms+0: _assert_fail msg=:reduced_elab3(test):x msg_len=23 severity=0 where=198 module=WORK.REDUCED_ELAB3.elab
+ ** Note: 0ms+0: Report Note: :reduced_elab3(test):x
+         File regress/reduced_elab3.vhd, Line 10
+
 To investigate more detail, do llvm-dis reduced regression's bitcode,
 
  $ llvm-dis work/_WORK.REDUCED_ELAB3.final.bc
