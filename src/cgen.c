@@ -547,9 +547,12 @@ static void cgen_prototype(tree_t t, LLVMTypeRef *args, bool procedure)
          {
             type_t type = tree_type(p);
             port_mode_t mode = tree_port_mode(p);
+            bool array = type_is_array(type);
             bool need_ptr = ((mode == PORT_OUT || mode == PORT_INOUT)
-                             && !type_is_array(type));
+                             && !array);
             if (need_ptr)
+               args[i] = LLVMPointerType(llvm_type(type), 0);
+            else if (array && (type_kind(type) != T_UARRAY))
                args[i] = LLVMPointerType(llvm_type(type), 0);
             else
                args[i] = llvm_type(type);
@@ -738,17 +741,22 @@ static void cgen_call_args(tree_t t, LLVMValueRef *args, struct cgen_ctx *ctx)
       else {
          args[i] = NULL;
 
-         type_t type = tree_type(p.value);
+         type_t type = tree_type(p.value), formal_type;
 
          // If this is a scalar out or inout parameter then we need
          // to pass a pointer rather than the value
          if (builtin == NULL) {
-            port_mode_t mode = tree_port_mode(tree_port(decl, i));
+            tree_t port = tree_port(decl, i);
+            port_mode_t mode = tree_port_mode(port);
             bool need_ptr = ((mode == PORT_OUT || mode == PORT_INOUT)
                              && !type_is_array(type));
             if (need_ptr)
                args[i] = cgen_get_var(tree_ref(p.value), ctx);
+
+            formal_type = tree_type(port);
          }
+         else
+            formal_type = type;
 
          if (args[i] == NULL)
             args[i] = cgen_expr(p.value, ctx);
@@ -757,7 +765,7 @@ static void cgen_call_args(tree_t t, LLVMValueRef *args, struct cgen_ctx *ctx)
          // a structure with its metadata. Note we don't need to do
          // this for unconstrained arrays as they are already wrapped.
          bool need_wrap =
-            type_is_array(type)
+            (type_kind(formal_type) == T_UARRAY)
             && cgen_const_bounds(type)
             && (builtin == NULL);
 
@@ -1963,8 +1971,10 @@ static void cgen_exit(tree_t t, struct cgen_ctx *ctx)
    LLVMPositionBuilderAtEnd(builder, not_bb);
 }
 
-static void cgen_case(tree_t t, struct cgen_ctx *ctx)
+static void cgen_case_scalar(tree_t t, struct cgen_ctx *ctx)
 {
+   // Case with scalar value maps onto LLVM case
+
    LLVMBasicBlockRef exit_bb = LLVMAppendBasicBlock(ctx->fn, "case_exit");
 
    LLVMBasicBlockRef else_bb = exit_bb;
@@ -2004,6 +2014,65 @@ static void cgen_case(tree_t t, struct cgen_ctx *ctx)
    }
 
    LLVMPositionBuilderAtEnd(builder, exit_bb);
+}
+
+static void cgen_case_array(tree_t t, struct cgen_ctx *ctx)
+{
+   // Case with array value must use chain of ifs
+
+   // TODO: multiple calls to cgen_array_rel is very inefficient
+   //       replace this with code to compare all values in a single
+   //       loop (e.g. build a bit mask of length #assocs)
+
+   LLVMBasicBlockRef exit_bb = LLVMAppendBasicBlock(ctx->fn, "case_exit");
+
+   LLVMValueRef val = cgen_expr(tree_value(t), ctx);
+   type_t type = tree_type(tree_value(t));
+
+   bool have_others = false;
+   for (unsigned i = 0; i < tree_assocs(t); i++) {
+      LLVMBasicBlockRef next_bb = NULL;
+      assoc_t a = tree_assoc(t, i);
+      switch (a.kind) {
+      case A_NAMED:
+         {
+            LLVMBasicBlockRef this_bb =
+               LLVMAppendBasicBlock(ctx->fn, "case_body");
+            next_bb = LLVMAppendBasicBlock(ctx->fn, "case_test");
+            LLVMValueRef eq = cgen_array_rel(val, cgen_expr(a.name, ctx),
+                                             type, type, LLVMIntEQ, ctx);
+            LLVMBuildCondBr(builder, eq, this_bb, next_bb);
+            LLVMPositionBuilderAtEnd(builder, this_bb);
+         }
+         break;
+
+      case A_OTHERS:
+         next_bb = exit_bb;
+         have_others = true;
+         break;
+
+      default:
+         assert(false);
+      }
+
+      cgen_stmt(a.value, ctx);
+      LLVMBuildBr(builder, exit_bb);
+
+      LLVMPositionBuilderAtEnd(builder, next_bb);
+   }
+
+   if (!have_others)
+      LLVMBuildBr(builder, exit_bb);
+
+   LLVMPositionBuilderAtEnd(builder, exit_bb);
+}
+
+static void cgen_case(tree_t t, struct cgen_ctx *ctx)
+{
+   if (type_is_array(tree_type(tree_value(t))))
+      cgen_case_array(t, ctx);
+   else
+      cgen_case_scalar(t, ctx);
 }
 
 static void cgen_pcall(tree_t t, struct cgen_ctx *ctx)
@@ -2214,11 +2283,8 @@ static void cgen_process(tree_t t)
 
    tree_visit_only(t, cgen_jump_table_fn, &ctx, T_WAIT);
 
-   if (ctx.entry_list == NULL) {
-      const loc_t *loc = tree_loc(t);
-      fprintf(stderr, "%s:%d: no wait statement in process\n",
-              loc->file, loc->first_line);
-   }
+   if (ctx.entry_list == NULL)
+      warn_at(tree_loc(t), "no wait statement in process");
 
    LLVMValueRef state_ptr = LLVMBuildStructGEP(builder, ctx.state, 0, "");
    LLVMValueRef jtarget = LLVMBuildLoad(builder, state_ptr, "");
