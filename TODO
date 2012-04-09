@@ -693,6 +693,57 @@ ppc32-linux has completely unexpected TRACE output, maybe "call" is broken?
  ppc32-linux > TRACE 0ms+0: _image val=c8480b2010 where=1208754184 module="(null)"
  i686-cygwin > TRACE 0ms+0: _image val=4 where=200 module="WORK.REDUCED_IMAGE.elab"
 
+nickg recently added --native option for elaboration.
+Though I should fix "format not a string literal and no format arguments" error,
+then I got,
+
+ [After merged from nickg/nvc master and fixed the format bug then did make ...]
+ $ rm -rf work
+ $ EXTRA_EFLAGS="--native" EXTRA_RFLAGS="--trace" ./run_regr.sh all reduced_image
+ > analyze
+ >> analyze regress/reduced_image.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/reduced_image.vhd
+ > elaborate
+ >> elaborate reduced_image
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e --native reduced_image
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_IMAGE.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_IMAGE.elab.bc
+ /usr/bin/llc -relocation-model=pic /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_IMAGE.final.bc
+ /usr/bin/gcc -shared -o /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_IMAGE.final.so /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_IMAGE.final.s
+ /usr/lib/gcc/powerpc-unknown-linux-gnu/4.5.3/../../../../powerpc-unknown-linux-gnu/bin/ld: warning: creating a DT_TEXTREL in a shared object.
+ > run
+ >> run reduced_image
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r --trace reduced_image
+ TRACE (init): process :reduced_image(test):_proc at 0xec82640
+ TRACE (init): reset process :reduced_image(test):_proc
+ TRACE (init): _sched_process delay=0ms
+ TRACE 0ms+0: begin cycle
+ 0ms     process  :reduced_image(test):_proc
+ TRACE 0ms+0: run process :reduced_image(test):_proc
+ TRACE 0ms+0: _image val=c80ec93020 where=2139062143 module="(null)"
+
+ *** Caught signal 11 (SIGSEGV) [address=(nil), ip=0xed9d110] ***
+
+ -------- STACK TRACE --------
+ /lib/libc.so.6(strlen+0xc) [0xed9d110]
+ /lib/libc.so.6(__overflow+0x74) [0xed90efc]
+ ../src/nvc() [0x10052ba8]
+ ../src/nvc() [0x10052da0]
+ ../src/nvc(_image+0x74) [0x10050a1c]
+ /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_IMAGE.final.so(_3A_reduced_image_28_test_29__3A__proc+0x50) [0xec82690]
+ ../src/nvc() [0x10051c50]
+ ../src/nvc() [0x10052828]
+ ../src/nvc(rt_batch_exec+0x60) [0x100534c0]
+ ../src/nvc() [0x10007360]
+ ../src/nvc(main+0x1c0) [0x10007880]
+ /lib/libc.so.6(+0x23110) [0xed35110]
+ /lib/libc.so.6(+0x232a0) [0xed352a0]
+ -----------------------------
+
+Where something goes wrong is same, but their symptoms are bit different.
+
+ ppc32-linux(w/o --native) > TRACE 0ms+0: _image val=c8480b2010 where=1208754184 module="(null)"
+ ppc32-linux(w/  --native) > TRACE 0ms+0: _image val=c80ec93020 where=2139062143 module="(null)"
+
 -----------------------------------------------------------------------
 Fix "nvc: tree.c:372: tree_ident: Assertion `t != ((void *)0)' failed."
 -----------------------------------------------------------------------
@@ -882,3 +933,55 @@ ppc32-linux has completely unexpected assertion, maybe "call" is broken?
 This assertion is triggered by tree_ident() that called by fmt_sig() for TRACE()
 in _inst_name().
 Maybe, the given argument to _inst_name(), _sig is invalid b/c "call" is broken?
+
+nickg recently added --native option for elaboration.
+Though I should fix "format not a string literal and no format arguments" error,
+then I got,
+
+ [After merged from nickg/nvc master and fixed the format bug then did make ...]
+ $ rm -rf work
+ $ EXTRA_EFLAGS="--native" EXTRA_RFLAGS="--trace" ./run_regr.sh all reduced_elab3
+ > analyze
+ >> analyze regress/reduced_elab3.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/reduced_elab3.vhd
+ > elaborate
+ >> elaborate reduced_elab3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e --native reduced_elab3
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_ELAB3.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_ELAB3.elab.bc
+ /usr/bin/llc -relocation-model=pic /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_ELAB3.final.bc
+ /usr/bin/gcc -shared -o /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_ELAB3.final.so /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_ELAB3.final.s
+ /usr/lib/gcc/powerpc-unknown-linux-gnu/4.5.3/../../../../powerpc-unknown-linux-gnu/bin/ld: warning: creating a DT_TEXTREL in a shared object.
+ > run
+ >> run reduced_elab3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r --trace reduced_elab3
+ TRACE (init): signal :reduced_elab3(test):x at 0xec93050
+ TRACE (init): process :reduced_elab3(test):_proc at 0xec826a0
+ TRACE (init): reset process :reduced_elab3(test):_proc
+ TRACE (init): _sched_process delay=0ms
+ TRACE 0ms+0: begin cycle
+ 0ms     process  :reduced_elab3(test):_proc
+ TRACE 0ms+0: run process :reduced_elab3(test):_proc
+
+ *** Caught signal 11 (SIGSEGV) [address=0xff000000, ip=0x100194a8] ***
+
+ -------- STACK TRACE --------
+ ../src/nvc(tree_ident+0x4c) [0x100194a8]
+ /lib/libc.so.6(+0x859a4) [0xed979a4]
+ ../src/nvc() [0x1004f9f8]
+ ../src/nvc(_inst_name+0x48) [0x10050cec]
+ /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_ELAB3.final.so(_3A_reduced_elab3_28_test_29__3A__proc+0x38) [0xec826d8]
+ ../src/nvc() [0x10051c50]
+ ../src/nvc() [0x10052828]
+ ../src/nvc(rt_batch_exec+0x60) [0x100534c0]
+ ../src/nvc() [0x10007360]
+ ../src/nvc(main+0x1c0) [0x10007880]
+ /lib/libc.so.6(+0x23110) [0xed35110]
+ /lib/libc.so.6(+0x232a0) [0xed352a0]
+ -----------------------------
+
+Now it just segfaults, b/c "-shared" implies "-DNDEBUG",
+
+ ppc32-linux(w/o --native) > nvc: tree.c:372: tree_ident: Assertion `t != ((void *)0)' failed.
+ ppc32-linux(w/  --native) > *** Caught signal 11 (SIGSEGV) [address=0xff000000, ip=0x100194a8] ***
+
+So it looks not LLVM JIT specific... :(
