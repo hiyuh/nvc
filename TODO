@@ -744,6 +744,111 @@ Where something goes wrong is same, but their symptoms are bit different.
  ppc32-linux(w/o --native) > TRACE 0ms+0: _image val=c8480b2010 where=1208754184 module="(null)"
  ppc32-linux(w/  --native) > TRACE 0ms+0: _image val=c80ec93020 where=2139062143 module="(null)"
 
+Now I emerged sys-devel/clang on Gentoo/PowerPC,
+
+ $ clang -v
+ clang version 3.1 (trunk)
+ Target: powerpc-unknown-linux-gnu
+ Thread model: posix
+
+ $ eix -Ic sys-devel/clang
+ [I] sys-devel/clang (9999@04/10/12): C language family frontend for LLVM
+ [NOTE: This sys-devel/clang-999 is live svn ebuild.
+        ATM, used svn trunk tells me it is r154381.]
+
+Test w/ clang again,
+
+ [After fix arch-depend IP usage to be clang friendly, ...]
+ $ CC=clang CXX=clang++ CFLAGS="-O0 -ggdb" CXXFLAGS="-O0 -ggdb" ./configure
+ [SNIP]
+ $ make
+ [SNIP]
+
+ $ cd test
+ $ EXTRA_RFLAGS="--trace" ./run_regr.sh all reduced_image
+ > analyze
+ >> analyze regress/reduced_image.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/reduced_image.vhd
+ > elaborate
+ >> elaborate reduced_image
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e reduced_image
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_IMAGE.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_IMAGE.elab.bc
+ > run
+ >> run reduced_image
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r --trace reduced_image
+ TRACE (init): process :reduced_image(test):_proc at 0x48032010
+ TRACE (init): reset process :reduced_image(test):_proc
+ TRACE (init): _sched_process delay=0ms
+ TRACE 0ms+0: begin cycle
+ 0ms     process  :reduced_image(test):_proc
+ TRACE 0ms+0: run process :reduced_image(test):_proc
+ TRACE 0ms+0: _image val=c8480b2010 where=1208754184 module="(null)"
+
+ *** Caught signal 11 (SIGSEGV) [address=(nil), ip=0xeda5110] ***
+
+ -------- STACK TRACE --------
+ /lib/libc.so.6(strlen+0xc) [0xeda5110]
+ [(nil)]
+ ../src/nvc() [0x1004f578]
+ ../src/nvc() [0x1004cd4c]
+ ../src/nvc(_image+0x84) [0x1004d2b8]
+ [0x4803206c]
+ ../src/nvc() [0x1004ee10]
+ ../src/nvc() [0x1004dfa4]
+ ../src/nvc(rt_batch_exec+0xcc) [0x1004d6f0]
+ ../src/nvc() [0x1000738c]
+ ../src/nvc(main+0x238) [0x10006a68]
+ /lib/libc.so.6(+0x23110) [0xed3d110]
+ /lib/libc.so.6(+0x232a0) [0xed3d2a0]
+ -----------------------------
+
+ $ EXTRA_EFLAGS="--native" EXTRA_RFLAGS="--trace" ./run_regr.sh all reduced_image
+ > analyze
+ >> analyze regress/reduced_image.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/reduced_image.vhd
+ > elaborate
+ >> elaborate reduced_image
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e --native reduced_image
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_IMAGE.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_IMAGE.elab.bc
+ /usr/bin/llc -relocation-model=pic /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_IMAGE.final.bc
+ /usr/bin/clang -shared -o /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_IMAGE.final.so /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_IMAGE.final.s
+ /usr/bin/powerpc-unknown-linux-gnu-ld: warning: creating a DT_TEXTREL in a shared object.
+ > run
+ >> run reduced_image
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r --trace reduced_image
+ TRACE (init): process :reduced_image(test):_proc at 0xec8a640
+ TRACE (init): reset process :reduced_image(test):_proc
+ TRACE (init): _sched_process delay=0ms
+ TRACE 0ms+0: begin cycle
+ 0ms     process  :reduced_image(test):_proc
+ TRACE 0ms+0: run process :reduced_image(test):_proc
+ TRACE 0ms+0: _image val=c80ec9b020 where=2138137971 module="(null)"
+
+ *** Caught signal 11 (SIGSEGV) [address=(nil), ip=0xeda5110] ***
+
+ -------- STACK TRACE --------
+ /lib/libc.so.6(strlen+0xc) [0xeda5110]
+ [(nil)]
+ ../src/nvc() [0x1004f578]
+ ../src/nvc() [0x1004cd4c]
+ ../src/nvc(_image+0x84) [0x1004d2b8]
+ /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_IMAGE.final.so(_3A_reduced_image_28_test_29__3A__proc+0x50) [0xec8a690]
+ ../src/nvc() [0x1004ee10]
+ ../src/nvc() [0x1004dfa4]
+ ../src/nvc(rt_batch_exec+0xcc) [0x1004d6f0]
+ ../src/nvc() [0x1000738c]
+ ../src/nvc(main+0x238) [0x10006a68]
+ /lib/libc.so.6(+0x23110) [0xed3d110]
+ /lib/libc.so.6(+0x232a0) [0xed3d2a0]
+ -----------------------------
+
+Where something goes wrong is same, and their symptoms are identical WRT gcc's.
+
+ ppc32-linux(gcc   w/o --native) > TRACE 0ms+0: _image val=c8480b2010 where=1208754184 module="(null)"
+ ppc32-linux(gcc   w/  --native) > TRACE 0ms+0: _image val=c80ec93020 where=2139062143 module="(null)"
+ ppc32-linux(clang w/o --native) > TRACE 0ms+0: _image val=c8480b2010 where=1208754184 module="(null)"
+ ppc32-linux(clang w/  --native) > TRACE 0ms+0: _image val=c80ec9b020 where=2138137971 module="(null)"
+
 -----------------------------------------------------------------------
 Fix "nvc: tree.c:372: tree_ident: Assertion `t != ((void *)0)' failed."
 -----------------------------------------------------------------------
@@ -985,3 +1090,80 @@ Now it just segfaults, b/c "-shared" implies "-DNDEBUG",
  ppc32-linux(w/  --native) > *** Caught signal 11 (SIGSEGV) [address=0xff000000, ip=0x100194a8] ***
 
 So it looks not LLVM JIT specific... :(
+
+Test w/ clang again,
+
+ [After fix arch-depend IP usage to be clang friendly, ...]
+ $ CC=clang CXX=clang++ CFLAGS="-O0 -ggdb" CXXFLAGS="-O0 -ggdb" ./configure
+ [SNIP]
+ $ make
+ [SNIP]
+
+ $ cd test
+ $ EXTRA_RFLAGS="--trace" ./run_regr.sh all reduced_elab3
+ > analyze
+ >> analyze regress/reduced_elab3.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/reduced_elab3.vhd
+ > elaborate
+ >> elaborate reduced_elab3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e reduced_elab3
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_ELAB3.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_ELAB3.elab.bc
+ > run
+ >> run reduced_elab3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r --trace reduced_elab3
+ TRACE (init): signal :reduced_elab3(test):x at 0x480b2010
+ TRACE (init): process :reduced_elab3(test):_proc at 0x48032010
+ TRACE (init): reset process :reduced_elab3(test):_proc
+ TRACE (init): _sched_process delay=0ms
+ TRACE 0ms+0: begin cycle
+ 0ms     process  :reduced_elab3(test):_proc
+ TRACE 0ms+0: run process :reduced_elab3(test):_proc
+ nvc: tree.c:374: ident_t tree_ident(tree_t): Assertion `t != ((void*)0)' failed.
+ Aborted
+
+ $ EXTRA_EFLAGS="--native" EXTRA_RFLAGS="--trace" ./run_regr.sh all reduced_elab3
+ > analyze
+ >> analyze regress/reduced_elab3.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/reduced_elab3.vhd
+ > elaborate
+ >> elaborate reduced_elab3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e --native reduced_elab3
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_ELAB3.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_ELAB3.elab.bc
+ /usr/bin/llc -relocation-model=pic /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_ELAB3.final.bc
+ /usr/bin/clang -shared -o /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_ELAB3.final.so /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_ELAB3.final.s
+ /usr/bin/powerpc-unknown-linux-gnu-ld: warning: creating a DT_TEXTREL in a shared object.
+ > run
+ >> run reduced_elab3
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -r --trace reduced_elab3
+ TRACE (init): signal :reduced_elab3(test):x at 0xec9b050
+ TRACE (init): process :reduced_elab3(test):_proc at 0xec8a6a0
+ TRACE (init): reset process :reduced_elab3(test):_proc
+ TRACE (init): _sched_process delay=0ms
+ TRACE 0ms+0: begin cycle
+ 0ms     process  :reduced_elab3(test):_proc
+ TRACE 0ms+0: run process :reduced_elab3(test):_proc
+
+ *** Caught signal 11 (SIGSEGV) [address=0x3fa00eca, ip=0x10016ed0] ***
+
+ -------- STACK TRACE --------
+ ../src/nvc(tree_ident+0x50) [0x10016ed0]
+ [0xd]
+ ../src/nvc() [0x1004c084]
+ ../src/nvc(_inst_name+0x44) [0x1004d560]
+ /home/hiyuh/git-repos/nvc/test/work/_WORK.REDUCED_ELAB3.final.so(_3A_reduced_elab3_28_test_29__3A__proc+0x38) [0xec8a6d8]
+ ../src/nvc() [0x1004ee10]
+ ../src/nvc() [0x1004dfa4]
+ ../src/nvc(rt_batch_exec+0xcc) [0x1004d6f0]
+ ../src/nvc() [0x1000738c]
+ ../src/nvc(main+0x238) [0x10006a68]
+ /lib/libc.so.6(+0x23110) [0xed3d110]
+ /lib/libc.so.6(+0x232a0) [0xed3d2a0]
+ -----------------------------
+
+Where something goes wrong is same, and their symptoms are identical WRT gcc's.
+
+ ppc32-linux(gcc   w/o --native) > nvc: tree.c:372: tree_ident: Assertion `t != ((void *)0)' failed.
+ ppc32-linux(gcc   w/  --native) > *** Caught signal 11 (SIGSEGV) [address=0xff000000, ip=0x100194a8] ***
+ ppc32-linux(clang w/o --native) > nvc: tree.c:374: ident_t tree_ident(tree_t): Assertion `t != ((void*)0)' failed.
+ ppc32-linux(clang w/  --native) > *** Caught signal 11 (SIGSEGV) [address=0x3fa00eca, ip=0x10016ed0] ***
+
