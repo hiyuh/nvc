@@ -1167,3 +1167,47 @@ Where something goes wrong is same, and their symptoms are identical WRT gcc's.
  ppc32-linux(clang w/o --native) > nvc: tree.c:374: ident_t tree_ident(tree_t): Assertion `t != ((void*)0)' failed.
  ppc32-linux(clang w/  --native) > *** Caught signal 11 (SIGSEGV) [address=0x3fa00eca, ip=0x10016ed0] ***
 
+--------------------------
+Support --native on cygwin
+--------------------------
+After change to use "dll" instead of "so" on cygwin,
+
+ $ uname -a
+ CYGWIN_NT-5.1 jabberwocky 1.7.11(0.260/5/3) 2012-02-24 14:05 i686 Cygwin
+
+ $ cd test
+ $ EXTRA_EFLAGS="--native" ./run_regr.sh analyze image
+ > analyze
+ >> analyze regress/image.vhd
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -a regress/image.vhd
+
+ $ EXTRA_EFLAGS="--native" ./run_regr.sh elaborate image
+ > elaborate
+ >> elaborate image
+ NVC_LIBPATH=../lib/std:../lib/ieee ../src/nvc -e --native image
+ /usr/bin/llvm-ld -r -b /home/hiyuh/git-repos/nvc/test/work/_WORK.IMAGE.final.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.IMAGE.elab.bc /home/hiyuh/git-repos/nvc/test/work/_WORK.P-body.bc
+ /usr/bin/llc -relocation-model=pic /home/hiyuh/git-repos/nvc/test/work/_WORK.IMAGE.final.bc
+ /usr/bin/gcc -shared -o /home/hiyuh/git-repos/nvc/test/work/_WORK.IMAGE.final.dll /home/hiyuh/git-repos/nvc/test/work/_WORK.IMAGE.final.s
+ /tmp/ccXc80KQ.o:fake:(.text+0x39): undefined reference to `__sched_process'
+ /tmp/ccXc80KQ.o:fake:(.text+0x7c): undefined reference to `__image'
+ /tmp/ccXc80KQ.o:fake:(.text+0xc4): undefined reference to `__assert_fail'
+ /tmp/ccXc80KQ.o:fake:(.text+0xf5): undefined reference to `__image'
+ /tmp/ccXc80KQ.o:fake:(.text+0x13b): undefined reference to `__assert_fail'
+ /tmp/ccXc80KQ.o:fake:(.text+0x176): undefined reference to `__image'
+ /tmp/ccXc80KQ.o:fake:(.text+0x1bc): undefined reference to `__assert_fail'
+ /tmp/ccXc80KQ.o:fake:(.text+0x1ed): undefined reference to `__image'
+ /tmp/ccXc80KQ.o:fake:(.text+0x256): undefined reference to `__image'
+ /tmp/ccXc80KQ.o:fake:(.text+0x2b5): undefined reference to `__image'
+ /tmp/ccXc80KQ.o:fake:(.text+0x309): undefined reference to `__array_copy'
+ /tmp/ccXc80KQ.o:fake:(.text+0x36d): undefined reference to `__array_copy'
+ /tmp/ccXc80KQ.o:fake:(.text+0x3a1): undefined reference to `__array_copy'
+ /tmp/ccXc80KQ.o:fake:(.text+0x3e0): undefined reference to `__array_copy'
+ /tmp/ccXc80KQ.o:fake:(.text+0x40a): undefined reference to `__assert_fail'
+ /tmp/ccXc80KQ.o:fake:(.text+0x43b): undefined reference to `__image'
+ /tmp/ccXc80KQ.o:fake:(.text+0x481): undefined reference to `__assert_fail'
+ /tmp/ccXc80KQ.o:fake:(.text+0x4b5): undefined reference to `__image'
+ /tmp/ccXc80KQ.o:fake:(.text+0x507): undefined reference to `__assert_fail'
+ /tmp/ccXc80KQ.o:fake:(.text+0x54c): undefined reference to `__image'
+ /tmp/ccXc80KQ.o:fake:(.text+0x595): undefined reference to `__assert_fail'
+ collect2: ld returned 1 exit status
+ ** Fatal: /usr/bin/gcc failed with status 1
