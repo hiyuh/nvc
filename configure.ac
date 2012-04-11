@@ -64,6 +64,8 @@ PKG_CHECK_MODULES([CHECK], [check >= 0.9.4], [], [])
 
 AX_DEFINE_DIR([DATADIR], [datadir/nvc], [Installation data directory])
 
+AC_DEFINE_UNQUOTED([SYSTEM_CC], ["$(which $CC)"], [System compiler])
+
 AC_CONFIG_HEADERS([config.h])
 AC_OUTPUT([Makefile src/Makefile src/rt/Makefile test/Makefile \
            lib/Makefile lib/std/Makefile lib/ieee/Makefile \

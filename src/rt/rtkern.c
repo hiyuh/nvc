@@ -293,6 +293,9 @@ void _assert_fail(const uint8_t *msg, int32_t msg_len, int8_t severity,
    // c) The value of the message string
    // d) The name of the design unit containing the assertion
 
+   TRACE("_assert_fail msg=%s msg_len=%d severity=%d where=%d module=%s",
+         msg, msg_len, severity, where, module);
+
    assert(severity < 4);
 
    const char *levels[] = {
@@ -388,6 +391,7 @@ void _array_copy(void *dst, const void *src,
 
 struct uarray _image(int64_t val, int32_t where, const char *module)
 {
+   TRACE("_image val=%"PRIx64" where=%d module=\"%s\"", val, where, module);
    tree_t t = rt_recall_tree(module, where);
 
    type_t type = tree_type(t);
@@ -436,6 +440,8 @@ int32_t _iexp(int32_t n, int32_t v)
 struct uarray _inst_name(void *_sig)
 {
    struct signal *sig = _sig;
+
+   TRACE("_inst_name sig=%s", fmt_sig(sig));
 
    const char *str = istr(tree_ident(sig->decl));
 

@@ -70,11 +70,11 @@ static bool            bootstrap = false;
 static ident_t         builtin_i;
 static ident_t         std_standard_i;
 
-#define sem_error(t, ...) {                           \
+#define sem_error(t, ...) do {                        \
       error_at(t ? tree_loc(t) : NULL , __VA_ARGS__); \
       errors++;                                       \
       return false;                                   \
-   }
+   } while (0)
 
 static void scope_push(ident_t prefix)
 {
@@ -2017,23 +2017,18 @@ static bool sem_check_conversion(tree_t t)
    sem_error(t, "conversion only allowed between closely related types");
 }
 
-static void sem_maybe_ambiguous(tree_t t, void *_ambiguous)
+static bool sem_maybe_ambiguous(tree_t t)
 {
-   bool *ambiguous = _ambiguous;
-
    switch (tree_kind(t)) {
    case T_REF:
       {
          tree_t decl = scope_find(tree_ident(t));
-         if (decl != NULL && tree_kind(decl) == T_ENUM_LIT)
-            *ambiguous = true;
+         return (decl != NULL && tree_kind(decl) == T_ENUM_LIT);
       }
-      break;
    case T_AGGREGATE:
-      *ambiguous = true;
-      break;
+      return true;
    default:
-      break;
+      return false;
    }
 }
 
@@ -2048,8 +2043,7 @@ static bool sem_resolve_overload(tree_t t, tree_t *pick, int *matches,
    for (unsigned i = 0; i < tree_params(t); i++) {
       param_t p = tree_param(t, i);
       assert(p.kind == P_POS);
-      ambiguous[i] = false;
-      tree_visit(p.value, sem_maybe_ambiguous, &ambiguous[i]);
+      ambiguous[i] = sem_maybe_ambiguous(p.value);
    }
 
    // First pass: only check those parameters which are unambiguous
@@ -2470,11 +2464,11 @@ static bool sem_check_concat(tree_t t)
    type_t expect;
    bool uniq_comp = type_set_uniq_composite(&expect);
 
-   bool ok, left_ambig = false, right_ambig = false;
+   bool ok;
    tree_t other;
 
-   sem_maybe_ambiguous(left, &left_ambig);
-   sem_maybe_ambiguous(right, &right_ambig);
+   bool left_ambig  = sem_maybe_ambiguous(left);
+   bool right_ambig = sem_maybe_ambiguous(right);
 
    if (left_ambig && right_ambig) {
       if (!uniq_comp)
@@ -3091,36 +3085,76 @@ static bool sem_check_if(tree_t t)
    return ok;
 }
 
-static void sem_locally_static_fn(tree_t t, void *context)
-{
-   bool *locally_static = context;
-
-   // Rules for locally static expressions are in LRM 93 7.4.1
-   // TODO: these are not implemented correctly
-
-   if (tree_kind(t) == T_LITERAL)
-      return;
-   else if (tree_kind(t) == T_REF) {
-      tree_t decl = tree_ref(t);
-      switch (tree_kind(decl)) {
-      case T_CONST_DECL:
-      case T_ENUM_LIT:
-         return;
-      default:
-         break;
-      }
-   }
-   else if (tree_kind(t) == T_QUALIFIED)
-      return;
-
-   *locally_static = false;
-}
-
 static bool sem_locally_static(tree_t t)
 {
-   bool locally_static = true;
-   tree_visit(t, sem_locally_static_fn, &locally_static);
-   return locally_static;
+   // Rules for locally static expressions are in LRM 93 7.4.1
+
+   type_t type = tree_type(t);
+   tree_kind_t kind = tree_kind(t);
+
+   // Any literal other than of type time
+   if (kind == T_LITERAL) {
+      type_t std_time = sem_std_type("TIME");
+      return !type_eq(type, std_time);
+   }
+   else if ((kind == T_REF) && (tree_kind(tree_ref(t)) == T_ENUM_LIT))
+      return true;
+
+   // A constant reference with a locally static value
+   if ((kind == T_REF) && (tree_kind(tree_ref(t)) == T_CONST_DECL))
+      return sem_locally_static(tree_value(tree_ref(t)));
+
+   // An alias of a locally static name
+   if (kind == T_ALIAS)
+      return sem_locally_static(tree_value(t));
+
+   // A function call of an implicit operator with locally static actuals
+   if (kind == T_FCALL) {
+      tree_t decl = tree_ref(t);
+      if (tree_attr_str(decl, builtin_i) == NULL)
+         return false;
+
+      bool all_static = true;
+      for (unsigned i = 0; i < tree_params(t); i++) {
+         param_t p = tree_param(t, i);
+         all_static = all_static && sem_locally_static(p.value);
+      }
+      return all_static;
+   }
+
+   // TODO: clauses e, f, and g re. attributes
+
+   // A qualified expression whose operand is locally static
+   if (kind == T_QUALIFIED)
+      return sem_locally_static(tree_value(t));
+
+   // A type conversion whose expression is locally static
+   if (kind == T_TYPE_CONV)
+      return sem_locally_static(tree_value(t));
+
+   // Aggregates must have locally static range and all elements
+   // must have locally static values
+   if (kind == T_AGGREGATE) {
+      range_t r = type_dim(type, 0);
+      if (r.kind != RANGE_TO && r.kind != RANGE_DOWNTO)
+         return false;
+
+      if (!sem_locally_static(r.left) || !sem_locally_static(r.right))
+         return false;
+
+      for (unsigned i = 0; i < tree_assocs(t); i++) {
+         assoc_t a = tree_assoc(t, i);
+         if ((a.kind == A_NAMED) && !sem_locally_static(a.name))
+            return false;
+
+         if (!sem_locally_static(a.value))
+            return false;
+      }
+
+      return true;
+   }
+
+   return false;
 }
 
 static bool sem_check_case(tree_t t)
@@ -3265,6 +3299,31 @@ static bool sem_check_exit(tree_t t)
    return true;
 }
 
+static bool sem_check_select(tree_t t)
+{
+   if (!sem_check(tree_value(t)))
+      return false;
+
+   type_t value_type = tree_type(tree_value(t));
+
+   for (unsigned i = 0; i < tree_assocs(t); i++) {
+      assoc_t a = tree_assoc(t, i);
+      if (a.kind == A_NAMED) {
+         if (!sem_check(a.name))
+            return false;
+         else if (!type_eq(tree_type(a.name), value_type))
+            sem_error(a.name, "choice must have type %s", type_pp(value_type));
+         else if (!sem_locally_static(a.name))
+            sem_error(a.name, "choice must be locally static");
+      }
+
+      if (!sem_check(a.value))
+         return false;
+   }
+
+   return true;
+}
+
 static void sem_intern_strings(void)
 {
    // Intern some commonly used strings
@@ -3358,6 +3417,8 @@ bool sem_check(tree_t t)
       return sem_check_concat(t);
    case T_PCALL:
       return sem_check_pcall(t);
+   case T_SELECT:
+      return sem_check_select(t);
    default:
       sem_error(t, "cannot check tree kind %d", tree_kind(t));
    }
