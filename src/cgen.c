@@ -37,9 +37,6 @@ static LLVMModuleRef  module = NULL;
 static LLVMBuilderRef builder = NULL;
 static LLVMValueRef   mod_name = NULL;
 
-static bool run_optimiser = true;
-static bool dump_module = false;
-
 static ident_t var_offset_i = NULL;
 static ident_t local_var_i = NULL;
 static ident_t sig_struct_i = NULL;
@@ -911,8 +908,15 @@ static LLVMValueRef cgen_instance_name(tree_t ref)
    tree_t decl = tree_ref(ref);
 
    LLVMValueRef signal = tree_attr_ptr(decl, sig_struct_i);
-   LLVMValueRef cast = llvm_void_cast(signal);
-   return LLVMBuildCall(builder, llvm_fn("_inst_name"), &cast, 1, "");
+   LLVMValueRef res = LLVMBuildAlloca(builder,
+                                      llvm_uarray_type(LLVMInt8Type()),
+                                      "inst_name");
+   LLVMValueRef args[] = {
+      llvm_void_cast(signal),
+      res
+   };
+   LLVMBuildCall(builder, llvm_fn("_inst_name"), args, ARRAY_LEN(args), "");
+   return LLVMBuildLoad(builder, res, "");
 }
 
 static LLVMValueRef cgen_fcall(tree_t t, struct cgen_ctx *ctx)
@@ -999,14 +1003,20 @@ static LLVMValueRef cgen_fcall(tree_t t, struct cgen_ctx *ctx)
                                tree_type(tree_param(t, 1).value),
                                LLVMIntNE, ctx);
       else if (icmp(builtin, "image")) {
+         bool is_signed = (type_kind(type_base_recur(arg_type)) == T_INTEGER);
+         LLVMOpcode op = (is_signed ? LLVMSExt : LLVMZExt);
+         LLVMValueRef res = LLVMBuildAlloca(builder,
+                                            llvm_uarray_type(LLVMInt8Type()),
+                                            "image");
          LLVMValueRef iargs[] = {
-            LLVMBuildIntCast(builder, args[0], LLVMInt64Type(), ""),
+            LLVMBuildCast(builder, op, args[0], LLVMInt64Type(), ""),
             llvm_int32(tree_index(tree_param(t, 0).value)),
             LLVMBuildPointerCast(builder, mod_name,
-                                 LLVMPointerType(LLVMInt8Type(), 0), "")
+                                 LLVMPointerType(LLVMInt8Type(), 0), ""),
+            res
          };
-         return LLVMBuildCall(builder, llvm_fn("_image"),
-                              iargs, ARRAY_LEN(iargs), "");
+         LLVMBuildCall(builder, llvm_fn("_image"), iargs, ARRAY_LEN(iargs), "");
+         return LLVMBuildLoad(builder, res, "");
       }
       else if (icmp(builtin, "succ")) {
          return LLVMBuildAdd(builder, args[0],
@@ -1577,7 +1587,13 @@ static void cgen_sched_process(LLVMValueRef after)
 
 static void cgen_sched_event(tree_t on)
 {
-   assert(tree_kind(on) == T_REF);
+   if (tree_kind(on) != T_REF) {
+      // It is possible for constant folding to replace a signal with
+      // a constant which will then appear in a sensitivity list so
+      // just ignore it
+      return;
+   }
+
    tree_t decl = tree_ref(on);
    type_t type = tree_type(decl);
 
@@ -2848,10 +2864,11 @@ static void cgen_support_fns(void)
    LLVMTypeRef _image_args[] = {
       LLVMInt64Type(),
       LLVMInt32Type(),
-      LLVMPointerType(LLVMInt8Type(), 0)
+      LLVMPointerType(LLVMInt8Type(), 0),
+      LLVMPointerType(llvm_uarray_type(LLVMInt8Type()), 0)
    };
    LLVMAddFunction(module, "_image",
-                   LLVMFunctionType(llvm_uarray_type(LLVMInt8Type()),
+                   LLVMFunctionType(LLVMVoidType(),
                                     _image_args,
                                     ARRAY_LEN(_image_args),
                                     false));
@@ -2886,10 +2903,11 @@ static void cgen_support_fns(void)
                                     false));
 
    LLVMTypeRef _inst_name_args[] = {
-      llvm_void_ptr()
+      llvm_void_ptr(),
+      LLVMPointerType(llvm_uarray_type(LLVMInt8Type()), 0)
    };
    LLVMAddFunction(module, "_inst_name",
-                   LLVMFunctionType(llvm_uarray_type(LLVMInt8Type()),
+                   LLVMFunctionType(LLVMVoidType(),
                                     _inst_name_args,
                                     ARRAY_LEN(_inst_name_args),
                                     false));
@@ -2929,13 +2947,13 @@ void cgen(tree_t top)
 
    cgen_top(top);
 
-   if (dump_module)
+   if (opt_get_int("dump-llvm"))
       LLVMDumpModule(module);
 
    if (LLVMVerifyModule(module, LLVMPrintMessageAction, NULL))
       fatal("LLVM verification failed");
 
-   if (run_optimiser)
+   if (opt_get_int("optimise"))
       optimise();
 
    char fname[256];
@@ -2950,12 +2968,3 @@ void cgen(tree_t top)
    LLVMDisposeModule(module);
 }
 
-void cgen_optimise_en(bool en)
-{
-   run_optimiser = en;
-}
-
-void cgen_dump_en(bool on)
-{
-   dump_module = on;
-}

@@ -60,7 +60,7 @@ void warn_at(const loc_t *loc, const char *fmt, ...)
 void note_at(const loc_t *loc, const char *fmt, ...)
    __attribute__((format(printf, 2, 3)));
 void fatal_at(const loc_t *loc, const char *fmt, ...)
-   __attribute__((format(printf, 2, 3)));
+   __attribute__((format(printf, 2, 3), noreturn));
 void error_at_v(const loc_t *loc, const char *fmt, va_list ap);
 
 void fmt_loc(FILE *f, const loc_t *loc);
@@ -83,5 +83,8 @@ bool read_b(FILE *f);
 int32_t read_i32(FILE *f);
 int64_t read_i64(FILE *f);
 uint8_t read_u8(FILE *f);
+
+void opt_set_int(const char *name, int val);
+int opt_get_int(const char *name);
 
 #endif // _UTIL_H

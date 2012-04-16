@@ -80,10 +80,10 @@ static int analyse(int argc, char **argv)
          // getopt_long already printed an error message
          exit(EXIT_FAILURE);
       case 'b':
-         sem_bootstrap_en(true);
+         opt_set_int("bootstrap", 1);
          break;
       case 'd':
-         cgen_dump_en(true);
+         opt_set_int("dump-llvm", 1);
          break;
       default:
          abort();
@@ -143,14 +143,13 @@ static int elaborate(int argc, char **argv)
    while ((c = getopt_long(argc, argv, spec, long_options, &index)) != -1) {
       switch (c) {
       case 'o':
-         cgen_optimise_en(false);
-         link_optimise_en(false);
+         opt_set_int("optimise", 0);
          break;
       case 'd':
-         cgen_dump_en(true);
+         opt_set_int("dump-llvm", 1);
          break;
       case 'n':
-         link_native_en(true);
+         opt_set_int("native", 1);
          break;
       case 0:
          // Set a flag
@@ -225,6 +224,7 @@ static int run(int argc, char **argv)
       {"command", no_argument, 0, 'c'},
       {"stop-time", required_argument, 0, 's'},
       {"vcd", required_argument, 0, 'v'},
+      {"stats", no_argument, 0, 'S'},
       {0, 0, 0, 0}
    };
 
@@ -245,7 +245,7 @@ static int run(int argc, char **argv)
          // getopt_long already printed an error message
          exit(EXIT_FAILURE);
       case 't':
-         rt_trace_en(true);
+         opt_set_int("rt_trace_en", 1);
          break;
       case 'b':
          mode = BATCH;
@@ -258,6 +258,9 @@ static int run(int argc, char **argv)
          break;
       case 'v':
          vcd_fname = optarg;
+         break;
+      case 'S':
+         opt_set_int("rt-stats", 1);
          break;
       default:
          abort();
@@ -344,6 +347,16 @@ static int dump_cmd(int argc, char **argv)
    return EXIT_SUCCESS;
 }
 
+static void set_default_opts(void)
+{
+   opt_set_int("rt-stats", 0);
+   opt_set_int("rt_trace_en", 0);
+   opt_set_int("dump-llvm", 0);
+   opt_set_int("optimise", 1);
+   opt_set_int("native", 0);
+   opt_set_int("bootstrap", 0);
+}
+
 static void usage(void)
 {
    printf("Usage: %s [OPTION]... COMMAND [OPTION]...\n"
@@ -370,6 +383,7 @@ static void usage(void)
           "Run options:\n"
           " -b, --batch\t\tRun in batch mode (default)\n"
           " -c, --command\t\tRun in TCL command line mode\n"
+          "     --stats\t\tPrint statistics at end of run\n"
           "     --stop-time=T\tStop after simulation time T (e.g. 5ns)\n"
           "     --trace\t\tTrace simulation events\n"
           "     --vcd=FILE\t\tWrite VCD data to FILE\n"
@@ -402,6 +416,7 @@ int main(int argc, char **argv)
 {
    term_init();
    register_trace_signal_handlers();
+   set_default_opts();
 
    static struct option long_options[] = {
       {"help",    no_argument,       0, 'h'},

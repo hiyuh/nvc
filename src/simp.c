@@ -605,6 +605,29 @@ static tree_t simp_for(tree_t t)
 
    range_t r = tree_range(t);
 
+   tree_t test = NULL;
+   switch (r.kind) {
+   case RANGE_TO:
+      test = call_builtin("leq", NULL, r.left, r.right, NULL);
+      break;
+   case RANGE_DOWNTO:
+      test = call_builtin("geq", NULL, r.left, r.right, NULL);
+      break;
+   case RANGE_DYN:
+      break;
+   default:
+      assert(false);
+   }
+
+   tree_t container = b;
+   if (test != NULL) {
+      container = tree_new(T_IF);
+      tree_set_ident(container, ident_uniq("null_check"));
+      tree_set_value(container, test);
+
+      tree_add_stmt(b, container);
+   }
+
    tree_t init = tree_new(T_VAR_ASSIGN);
    tree_set_ident(init, ident_uniq("init"));
    tree_set_target(init, var);
@@ -671,8 +694,8 @@ static tree_t simp_for(tree_t t)
    tree_add_stmt(wh, exit);
    tree_add_stmt(wh, next);
 
-   tree_add_stmt(b, init);
-   tree_add_stmt(b, wh);
+   tree_add_stmt(container, init);
+   tree_add_stmt(container, wh);
 
    return b;
 }
@@ -685,7 +708,8 @@ static void simp_build_wait(tree_t ref, void *context)
    tree_t wait = context;
 
    tree_t decl = tree_ref(ref);
-   if (tree_kind(decl) == T_SIGNAL_DECL) {
+   tree_kind_t kind = tree_kind(decl);
+   if (kind == T_SIGNAL_DECL || kind == T_PORT_DECL) {
       // Check for duplicates
       for (unsigned i = 0; i < tree_triggers(wait); i++) {
          if (tree_ref(tree_trigger(wait, i)) == decl)
@@ -797,6 +821,39 @@ static tree_t simp_aggregate(tree_t t)
    return t;
 }
 
+static tree_t simp_select(tree_t t)
+{
+   // Replace a select statement with a case inside a process
+
+   tree_t p = tree_new(T_PROCESS);
+   tree_set_ident(p, tree_ident(t));
+
+   tree_t w = tree_new(T_WAIT);
+   tree_set_ident(w, ident_new("select_wait"));
+
+   tree_t c = tree_new(T_CASE);
+   tree_set_ident(c, ident_new("select_case"));
+   tree_set_loc(c, tree_loc(t));
+   tree_set_value(c, tree_value(t));
+
+   tree_visit_only(tree_value(t), simp_build_wait, w, T_REF);
+
+   for (unsigned i = 0; i < tree_assocs(t); i++) {
+      assoc_t a = tree_assoc(t, i);
+      tree_add_assoc(c, a);
+
+      if (a.kind == A_NAMED)
+         tree_visit_only(a.name, simp_build_wait, w, T_REF);
+
+      for (unsigned j = 0; j < tree_waveforms(a.value); j++)
+         tree_visit_only(tree_waveform(a.value, j), simp_build_wait, w, T_REF);
+   }
+
+   tree_add_stmt(p, c);
+   tree_add_stmt(p, w);
+   return p;
+}
+
 static tree_t simp_tree(tree_t t, void *context)
 {
    switch (tree_kind(t)) {
@@ -822,6 +879,8 @@ static tree_t simp_tree(tree_t t, void *context)
       return simp_cassign(t);
    case T_AGGREGATE:
       return simp_aggregate(t);
+   case T_SELECT:
+      return simp_select(t);
    case T_NULL:
       return NULL;   // Delete it
    default:

@@ -339,6 +339,7 @@ package_decl
 : tPACKAGE id tIS package_decl_part tEND opt_package_token opt_id tSEMI
   {
      $$ = tree_new(T_PACKAGE);
+     tree_set_loc($$, &@$);
      tree_set_ident($$, $2);
      copy_trees($4, tree_add_decl, $$);
 
@@ -1001,7 +1002,8 @@ selected_waveforms
 : waveform tWHEN choice_list tCOMMA selected_waveforms
   {
      tree_t s = tree_new(T_SIGNAL_ASSIGN);
-     tree_set_loc(s, &@$);
+     tree_set_ident(s, loc_to_ident(&@1));
+     tree_set_loc(s, &@1);
      copy_trees($1, tree_add_waveform, s);
 
      for (list_t *it = $3; it != NULL; it = it->next)
@@ -1012,7 +1014,8 @@ selected_waveforms
 | waveform tWHEN choice_list
   {
      tree_t s = tree_new(T_SIGNAL_ASSIGN);
-     tree_set_loc(s, &@$);
+     tree_set_ident(s, loc_to_ident(&@1));
+     tree_set_loc(s, &@1);
      copy_trees($1, tree_add_waveform, s);
 
      for (list_t *it = $3; it != NULL; it = it->next)

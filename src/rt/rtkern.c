@@ -31,6 +31,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #define TRACE_DELTAQ  1
 #define EXIT_SEVERITY 2
@@ -110,10 +112,17 @@ struct loaded {
    struct loaded *next;
 };
 
+struct run_queue {
+   struct event **queue;
+   size_t       wr, rd;
+   size_t       alloc;
+};
+
 static struct rt_proc   *procs = NULL;
 static struct rt_proc   *active_proc = NULL;
 static struct sens_list *resume = NULL;
 static struct loaded    *loaded = NULL;
+static struct run_queue run_queue;
 
 static heap_t        eventq_heap = NULL;
 static size_t        n_procs = 0;
@@ -122,6 +131,7 @@ static int           iteration = -1;
 static bool          trace_on = false;
 static ident_t       i_signal = NULL;
 static tree_rd_ctx_t tree_rd_ctx = NULL;
+static struct rusage ready_rusage;
 
 static rt_alloc_stack_t event_stack = NULL;
 static rt_alloc_stack_t waveform_stack = NULL;
@@ -271,14 +281,14 @@ void _sched_event(void *_sig, int32_t n)
       if (it == NULL) {
          struct sens_list *node = rt_alloc(sens_list_stack);
          node->proc       = active_proc;
-         node->wakeup_gen = active_proc->wakeup_gen + 1;
+         node->wakeup_gen = active_proc->wakeup_gen;
          node->next       = sig[i].sensitive;
 
          sig[i].sensitive = node;
       }
       else {
          // Reuse the stale entry
-         it->wakeup_gen = active_proc->wakeup_gen + 1;
+         it->wakeup_gen = active_proc->wakeup_gen;
       }
    }
 }
@@ -389,7 +399,7 @@ void _array_copy(void *dst, const void *src,
       memcpy((char *)dst + (off * sz), src, n * sz);
 }
 
-struct uarray _image(int64_t val, int32_t where, const char *module)
+void _image(int64_t val, int32_t where, const char *module, struct uarray *u)
 {
    TRACE("_image val=%"PRIx64" where=%d module=\"%s\"", val, where, module);
    tree_t t = rt_recall_tree(module, where);
@@ -416,12 +426,10 @@ struct uarray _image(int64_t val, int32_t where, const char *module)
       fatal_at(tree_loc(t), "cannot use 'IMAGE with this type");
    }
 
-   struct uarray u;
-   u.ptr   = buf;
-   u.left  = 0;
-   u.right = len - 1;
-   u.dir   = RANGE_TO;
-   return u;
+   u->ptr   = buf;
+   u->left  = 0;
+   u->right = len - 1;
+   u->dir   = RANGE_TO;
 }
 
 void _debug_out(int32_t val)
@@ -437,7 +445,7 @@ int32_t _iexp(int32_t n, int32_t v)
    return (int32_t)pow(n, v);
 }
 
-struct uarray _inst_name(void *_sig)
+void _inst_name(void *_sig, struct uarray *u)
 {
    struct signal *sig = _sig;
 
@@ -449,12 +457,10 @@ struct uarray _inst_name(void *_sig)
    char *buf = rt_tmp_alloc(len);
    strncpy(buf, str, len);
 
-   struct uarray u;
-   u.ptr   = buf;
-   u.left  = 0;
-   u.right = len - 1;
-   u.dir   = RANGE_TO;
-   return u;
+   u->ptr   = buf;
+   u->left  = 0;
+   u->right = len - 1;
+   u->dir   = RANGE_TO;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -634,7 +640,6 @@ static void rt_run(struct rt_proc *proc, bool reset)
 
    active_proc = proc;
    (*proc->proc_fn)(reset ? 1 : 0);
-   ++(proc->wakeup_gen);
 
    // Free any temporary memory allocated by the process
    while (proc->tmp_chunks) {
@@ -666,6 +671,7 @@ static void rt_wakeup(struct sens_list *sl)
 
    if (sl->wakeup_gen == sl->proc->wakeup_gen) {
       TRACE("wakeup process %s", istr(tree_ident(sl->proc->source)));
+      ++(sl->proc->wakeup_gen);
       sl->next = resume;
       resume = sl;
    }
@@ -779,6 +785,34 @@ static void rt_update_driver(struct signal *s, int source)
       assert(w_now != NULL);
 }
 
+static void rt_push_run_queue(struct event *e)
+{
+   if (unlikely(run_queue.wr == run_queue.alloc)) {
+      if (run_queue.alloc == 0) {
+         run_queue.alloc = 128;
+         run_queue.queue = xmalloc(sizeof(struct event *) * run_queue.alloc);
+      }
+      else {
+         run_queue.alloc *= 2;
+         run_queue.queue = realloc(run_queue.queue,
+                                   sizeof(struct event *) * run_queue.alloc);
+      }
+   }
+
+   run_queue.queue[(run_queue.wr)++] = e;
+}
+
+static struct event *rt_pop_run_queue(void)
+{
+   if (run_queue.wr == run_queue.rd) {
+      run_queue.wr = 0;
+      run_queue.rd = 0;
+      return NULL;
+   }
+   else
+      return run_queue.queue[(run_queue.rd)++];
+}
+
 static void rt_cycle(void)
 {
    // Simulation cycle is described in LRM 93 section 12.6.4
@@ -801,8 +835,18 @@ static void rt_cycle(void)
 #endif
 
    for (;;) {
-      struct event *event = heap_extract_min(eventq_heap);
+      rt_push_run_queue(heap_extract_min(eventq_heap));
 
+      if (heap_size(eventq_heap) == 0)
+         break;
+
+      peek = heap_min(eventq_heap);
+      if (peek->when > now || peek->iteration != iteration)
+         break;
+   }
+
+   struct event *event;
+   while ((event = rt_pop_run_queue())) {
       switch (event->kind) {
       case E_PROCESS:
          rt_run(event->wake_proc, false /* reset */);
@@ -814,13 +858,6 @@ static void rt_cycle(void)
       }
 
       rt_free(event_stack, event);
-
-      if (heap_size(eventq_heap) == 0)
-         break;
-
-      peek = heap_min(eventq_heap);
-      if (peek->when > now || peek->iteration != iteration)
-         break;
    }
 
    if (unlikely(now == 0 && iteration == 0))
@@ -905,6 +942,8 @@ static void rt_one_time_init(void)
    jit_bind_fn("_iexp", _iexp);
    jit_bind_fn("_inst_name", _inst_name);
 
+   trace_on = opt_get_int("rt_trace_en");
+
    event_stack     = rt_alloc_stack_new(sizeof(struct event));
    waveform_stack  = rt_alloc_stack_new(sizeof(struct waveform));
    sens_list_stack = rt_alloc_stack_new(sizeof(struct sens_list));
@@ -963,15 +1002,39 @@ static void rt_cleanup(tree_t top)
    rt_alloc_stack_destroy(sens_list_stack);
 }
 
-void rt_trace_en(bool en)
-{
-   trace_on = en;
-}
-
 static bool rt_stop_now(uint64_t stop_time)
 {
    struct event *peek = heap_min(eventq_heap);
    return peek->when > stop_time;
+}
+
+static void rt_stats_ready(void)
+{
+   if (getrusage(RUSAGE_SELF, &ready_rusage) < 0)
+      fatal_errno("getrusage");
+}
+
+static unsigned rt_tv2ms(struct timeval *tv)
+{
+   return (tv->tv_sec * 1000) + (tv->tv_usec / 1000);
+}
+
+static void rt_stats_print(void)
+{
+   struct rusage final_rusage;
+   if (getrusage(RUSAGE_SELF, &final_rusage) < 0)
+      fatal_errno("getrusage");
+
+   unsigned ready_u = rt_tv2ms(&ready_rusage.ru_utime);
+   unsigned ready_s = rt_tv2ms(&ready_rusage.ru_stime);
+
+   unsigned final_u = rt_tv2ms(&final_rusage.ru_utime);
+   unsigned final_s = rt_tv2ms(&final_rusage.ru_stime);
+
+   notef("setup:%ums run:%ums maxrss:%ldkB",
+         ready_u + ready_s,
+         final_u + final_s - ready_u - ready_s,
+         final_rusage.ru_maxrss);
 }
 
 void rt_batch_exec(tree_t e, uint64_t stop_time, tree_rd_ctx_t ctx)
@@ -982,12 +1045,16 @@ void rt_batch_exec(tree_t e, uint64_t stop_time, tree_rd_ctx_t ctx)
 
    rt_one_time_init();
    rt_setup(e);
+   rt_stats_ready();
    rt_initial();
    while (heap_size(eventq_heap) > 0 && !rt_stop_now(stop_time))
       rt_cycle();
    rt_cleanup(e);
 
    jit_shutdown();
+
+   if (opt_get_int("rt-stats"))
+      rt_stats_print();
 }
 
 static void rt_slave_run(slave_run_msg_t *msg)

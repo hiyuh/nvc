@@ -19,6 +19,7 @@ static error_fn_t orig_error_fn = NULL;
 static void setup(void)
 {
    lib_set_work(lib_tmp());
+   opt_set_int("bootstrap", 0);
 }
 
 static void teardown(void)
@@ -668,7 +669,7 @@ START_TEST(test_conc)
       { 18, "reject interval must have type TIME" },
       { 26, "choice must be locally static" },
       { 29, "no suitable overload for identifier TRUE" },
-      { 32, "choice must have type STD.STANDARD.INTEGER" },
+      { 32, "no suitable overload for identifier FALSE" },
       { -1, NULL }
    };
    expect_errors(expect);

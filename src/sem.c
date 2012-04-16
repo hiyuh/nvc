@@ -23,6 +23,9 @@
 #include <stdarg.h>
 #include <string.h>
 #include <ctype.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 struct ident_list {
    ident_t           ident;
@@ -66,7 +69,6 @@ static bool sem_locally_static(tree_t t);
 static struct scope    *top_scope = NULL;
 static int             errors = 0;
 static struct type_set *top_type_set = NULL;
-static bool            bootstrap = false;
 static ident_t         builtin_i;
 static ident_t         std_standard_i;
 
@@ -278,6 +280,30 @@ static void scope_replace(tree_t t, tree_t with)
    scope_replace_at(t, with, top_scope->decls);
 }
 
+static bool sem_check_stale(lib_t lib, tree_t t)
+{
+   // Check if the source file corresponding to t has been modified
+   // more recently than the library unit
+
+   const loc_t *l = tree_loc(t);
+   if (l->file == NULL)
+      return true;
+
+   struct stat st;
+   if (stat(l->file, &st) < 0) {
+      if (errno != ENOENT)
+         fatal_errno("%s", l->file);
+      else
+         return true;
+   }
+
+   if (st.st_mtime > lib_mtime(lib, tree_ident(t)))
+      sem_error(NULL, "source file %s for unit %s has changed and must "
+                "be reanalysed", l->file, istr(tree_ident(t)));
+   else
+      return true;
+}
+
 static bool scope_import_unit(context_t ctx, lib_t lib, bool all)
 {
    // Check we haven't already imported this
@@ -296,6 +322,9 @@ static bool scope_import_unit(context_t ctx, lib_t lib, bool all)
       errors++;
       return false;
    }
+
+   if (!sem_check_stale(lib, unit))
+      return false;
 
    for (unsigned n = 0; n < tree_decls(unit); n++) {
       tree_t decl = tree_decl(unit, n);
@@ -886,7 +915,7 @@ static bool sem_check_context(tree_t t)
 {
    // The std.standard package is also implicit unless we are
    // bootstrapping
-   if (!bootstrap) {
+   if (!opt_get_int("bootstrap")) {
       lib_t std = lib_find("std", true, true);
       if (std == NULL)
          fatal("failed to find std library");
@@ -1760,6 +1789,9 @@ static bool sem_check_arch(tree_t t)
    if (e == NULL)
       sem_error(t, "missing declaration for entity %s",
                 istr(tree_ident2(t)));
+
+   if (!sem_check_stale(lib_work(), e))
+      return false;
 
    assert(top_scope == NULL);
    scope_push(NULL);
@@ -3055,6 +3087,13 @@ static bool sem_check_instance(tree_t t)
    if (unit == NULL)
       sem_error(t, "cannot find unit %s", istr(tree_ident2(t)));
 
+   if (tree_kind(unit) == T_ARCH) {
+      unit = lib_get(lib_work(), ident_until(tree_ident2(t), '-'));
+      if (unit == NULL)
+         sem_error(t, "no entity corresponding to architecture %s",
+                   istr(tree_ident2(t)));
+   }
+
    tree_set_ref(t, unit);
 
    return sem_check_map(t, unit, tree_ports, tree_port,
@@ -3309,7 +3348,7 @@ static bool sem_check_select(tree_t t)
    for (unsigned i = 0; i < tree_assocs(t); i++) {
       assoc_t a = tree_assoc(t, i);
       if (a.kind == A_NAMED) {
-         if (!sem_check(a.name))
+         if (!sem_check_constrained(a.name, value_type))
             return false;
          else if (!type_eq(tree_type(a.name), value_type))
             sem_error(a.name, "choice must have type %s", type_pp(value_type));
@@ -3427,9 +3466,4 @@ bool sem_check(tree_t t)
 int sem_errors(void)
 {
    return errors;
-}
-
-void sem_bootstrap_en(bool en)
-{
-   bootstrap = en;
 }

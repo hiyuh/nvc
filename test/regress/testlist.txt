@@ -64,3 +64,7 @@ block1          normal
 elab3           normal,gold
 func6           normal
 case2           normal
+case3           normal
+wait6           normal,gold
+elab4           normal
+elab5           normal
