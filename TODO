@@ -499,3 +499,22 @@ After change to use "dll" instead of "so" on cygwin,
  /tmp/ccXc80KQ.o:fake:(.text+0x595): undefined reference to `__assert_fail'
  collect2: ld returned 1 exit status
  ** Fatal: /usr/bin/gcc failed with status 1
+
+----------------------------------------------------------------
+Fix "which: invalid option -- 's'" after "checking for CHECK..."
+----------------------------------------------------------------
+Doing ./configure, I got,
+
+ $ ./configure
+ [SNIP]
+ checking for CHECK... yes
+ which: invalid option -- s
+ which: invalid option -- t
+ which: invalid option -- d
+ which: invalid option -- =
+ which: invalid option -- g
+ which: invalid option -- n
+ which: invalid option -- u
+ which: invalid option -- 9
+ which: invalid option -- 9
+ [SNIP]
