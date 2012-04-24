@@ -41,6 +41,7 @@
 #include <readline/history.h>
 #endif
 
+#if defined HAVE_TCL_TCL_H || defined HAVE_TCL_H
 static int shell_cmd_restart(ClientData cd, Tcl_Interp *interp,
                              int objc, Tcl_Obj *const objv[])
 {
@@ -263,3 +264,4 @@ void shell_run(tree_t e)
 
    Tcl_Exit(EXIT_SUCCESS);
 }
+#endif

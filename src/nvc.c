@@ -220,15 +220,19 @@ static int run(int argc, char **argv)
 
    static struct option long_options[] = {
       {"trace", no_argument, 0, 't'},
+#if defined HAVE_TCL_TCL_H || defined HAVE_TCL_H
       {"batch", no_argument, 0, 'b'},
       {"command", no_argument, 0, 'c'},
+#endif
       {"stop-time", required_argument, 0, 's'},
       {"vcd", required_argument, 0, 'v'},
       {"stats", no_argument, 0, 'S'},
       {0, 0, 0, 0}
    };
 
+#if defined HAVE_TCL_TCL_H || defined HAVE_TCL_H
    enum { BATCH, COMMAND } mode = BATCH;
+#endif
 
    uint64_t stop_time = UINT64_MAX;
    const char *vcd_fname = NULL;
@@ -247,12 +251,14 @@ static int run(int argc, char **argv)
       case 't':
          opt_set_int("rt_trace_en", 1);
          break;
+#if defined HAVE_TCL_TCL_H || defined HAVE_TCL_H
       case 'b':
          mode = BATCH;
          break;
       case 'c':
          mode = COMMAND;
          break;
+#endif
       case 's':
          stop_time = parse_time(optarg);
          break;
@@ -282,6 +288,7 @@ static int run(int argc, char **argv)
    if (vcd_fname != NULL)
       vcd_init(vcd_fname, e);
 
+#if defined HAVE_TCL_TCL_H || defined HAVE_TCL_H
    if (mode == BATCH)
       rt_batch_exec(e, stop_time, ctx);
    else {
@@ -291,6 +298,9 @@ static int run(int argc, char **argv)
       else
          rt_slave_exec(e, ctx);
    }
+#else
+   rt_batch_exec(e, stop_time, ctx);
+#endif
 
    tree_read_end(ctx);
    return EXIT_SUCCESS;
@@ -381,8 +391,10 @@ static void usage(void)
           "     --native\t\tGenerate native code shared library\n"
           "\n"
           "Run options:\n"
+#if defined HAVE_TCL_TCL_H || defined HAVE_TCL_H
           " -b, --batch\t\tRun in batch mode (default)\n"
           " -c, --command\t\tRun in TCL command line mode\n"
+#endif
           "     --stats\t\tPrint statistics at end of run\n"
           "     --stop-time=T\tStop after simulation time T (e.g. 5ns)\n"
           "     --trace\t\tTrace simulation events\n"
@@ -405,8 +417,13 @@ static void version(void)
       "General Public Licence for details.";
 
 #ifdef HAVE_CONFIG_H
+#if defined HAVE_TCL_TCL_H || defined HAVE_TCL_H
    printf("%s (llvm %s; tcl %s)\n",
           PACKAGE_STRING, LLVM_VERSION, TCL_VERSION);
+#else
+   printf("%s (llvm %s)\n",
+          PACKAGE_STRING, LLVM_VERSION);
+#endif
 #endif
 
    puts(copy);

@@ -46,17 +46,23 @@ AC_CHECK_HEADERS([limits.h stddef.h fcntl.h libintl.h malloc.h \
 AC_CHECK_MEMBERS([struct stat.st_mtimespec.tv_nsec])
 AC_CHECK_MEMBERS([struct stat.st_mtim.tv_nsec])
 
-AC_CHECK_HEADERS([tcl.h tcl/tcl.h], [have_tcl=yes; break], [])
-AC_SEARCH_LIBS([Tcl_CreateInterp], [tcl], [],
-  [AC_ERROR(TCL library not found)])
-
-if test ! "$have_tcl" = "yes"; then
-  AC_ERROR(TCL header file not found)
-fi
-
-VL_LIB_READLINE
-if test "$vl_cv_lib_readline" = "no"; then
-  AC_WARN(terminal line editing will not be supported)
+AC_ARG_WITH(tcl,
+  AC_HELP_STRING([--without-tcl],
+                 [do not use tcl (command processing support)]),
+  [with_tcl=$withval])
+if test "$with_tcl" = "no"; then
+  AC_MSG_NOTICE([excluding tcl (command processing support)])
+else
+  AC_CHECK_HEADERS([tcl.h tcl/tcl.h], [have_tcl=yes; break], [])
+  AC_SEARCH_LIBS([Tcl_CreateInterp], [tcl], [],
+    [AC_ERROR(TCL library not found)])
+  if test ! "$have_tcl" = "yes"; then
+    AC_ERROR(TCL header file not found)
+  fi
+  VL_LIB_READLINE
+  if test "$vl_cv_lib_readline" = "no"; then
+    AC_WARN(terminal line editing will not be supported)
+  fi
 fi
 
 AX_LLVM_C([engine bitreader bitwriter])

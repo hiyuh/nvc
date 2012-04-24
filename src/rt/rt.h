@@ -39,7 +39,9 @@ void *jit_fun_ptr(const char *name);
 void *jit_var_ptr(const char *name);
 void jit_bind_fn(const char *name, void *ptr);
 
+#if defined HAVE_TCL_TCL_H || defined HAVE_TCL_H
 void shell_run(struct tree *e);
+#endif
 
 const char *pprint(struct tree *t, uint64_t *values, unsigned len);
 
