@@ -2484,6 +2484,14 @@ static bool sem_check_concat_param(tree_t t, type_t expect)
    return ok;
 }
 
+static type_t sem_index_type(type_t type)
+{
+   if (type_kind(type) == T_UARRAY)
+      return type_index_constr(type, 0);
+   else
+      return tree_type(type_dim(type, 0).left);
+}
+
 static bool sem_check_concat(tree_t t)
 {
    // Concatenation expressions are treated differently to other operators
@@ -2493,8 +2501,9 @@ static bool sem_check_concat(tree_t t)
    tree_t left  = tree_param(t, 0).value;
    tree_t right = tree_param(t, 1).value;
 
-   type_t expect;
-   bool uniq_comp = type_set_uniq_composite(&expect);
+   type_t composite;
+   bool uniq_comp = type_set_uniq_composite(&composite);
+   type_t expect = composite;
 
    bool ok;
    tree_t other;
@@ -2540,12 +2549,7 @@ static bool sem_check_concat(tree_t t)
       if (sem_array_dimension(ltype) > 1)
          sem_error(t, "cannot concatenate arrays with more than one dimension");
 
-      type_t index_type;
-      if (lkind == T_UARRAY)
-         index_type = type_index_constr(ltype, 0);
-      else
-         index_type = tree_type(type_dim(ltype, 0).left);
-
+      type_t index_type = sem_index_type(ltype);
       range_t index_r = type_dim(index_type, 0);
 
       type_t std_int = sem_std_type("INTEGER");
@@ -2598,12 +2602,7 @@ static bool sem_check_concat(tree_t t)
       if (!type_eq(stype, type_elem(atype)))
          sem_error(t, "type of scalar does not match element type of array");
 
-      type_t index_type;
-      if (akind == T_UARRAY)
-         index_type = type_index_constr(atype, 0);
-      else
-         index_type = tree_type(type_dim(atype, 0).left);
-
+      type_t index_type = sem_index_type(atype);
       range_t index_r = type_dim(index_type, 0);
 
       type_t std_int = sem_std_type("INTEGER");
@@ -2629,8 +2628,31 @@ static bool sem_check_concat(tree_t t)
 
       tree_set_type(t, result);
    }
-   else
-      sem_error(t, "cannot check this kind of concatenation");
+   else {
+      // Concatenating two scalars
+
+      if (!type_eq(ltype, rtype))
+         sem_error(t, "cannot concatenate values of different types");
+
+      type_t index_type = sem_index_type(composite);
+      range_t index_r = type_dim(index_type, 0);
+
+      tree_t result_right = call_builtin(
+         "add", index_type, index_r.left, sem_int_lit(index_type, 1), NULL);
+
+      type_t result = type_new(T_SUBTYPE);
+      type_set_ident(result, type_ident(composite));
+      type_set_base(result, composite);
+
+      range_t result_r = {
+         .kind  = index_r.kind,
+         .left  = index_r.left,
+         .right = result_right
+      };
+      type_add_dim(result, result_r);
+
+      tree_set_type(t, result);
+   }
 
    return true;
 }
@@ -2887,11 +2909,7 @@ static bool sem_check_array_ref(tree_t t)
       if (p.kind != P_POS)
          sem_error(t, "only scalar references supported");
 
-      type_t expect;
-      if (type_kind(type) == T_UARRAY)
-         expect = type_index_constr(type, i);
-      else
-         expect = tree_type(type_dim(type, i).left);
+      type_t expect = sem_index_type(type);
 
       ok = sem_check_constrained(p.value, expect) && ok;
 
