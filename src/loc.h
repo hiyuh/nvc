@@ -27,6 +27,6 @@ typedef struct loc {
    const char     *linebuf;
 } loc_t;
 
-static const loc_t LOC_INVALID = { -1, -1, -1, -1, NULL, NULL };
+static const loc_t LOC_INVALID = { 0, 0, 0, 0, NULL, NULL };
 
 #endif  // _LOC_H
