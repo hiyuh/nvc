@@ -56,6 +56,22 @@ static void dump_params(tree_t t)
    }
 }
 
+static void dump_range(range_t r)
+{
+   dump_expr(r.left);
+   switch (r.kind) {
+   case RANGE_TO:
+      printf(" to "); break;
+   case RANGE_DOWNTO:
+      printf(" downto "); break;
+   case RANGE_DYN:
+      printf(" dynamic "); break;
+   default:
+      assert(false);
+   }
+   dump_expr(r.right);
+}
+
 static void dump_expr(tree_t t)
 {
    switch (tree_kind(t)) {
@@ -99,6 +115,11 @@ static void dump_expr(tree_t t)
             printf("others => ");
             dump_expr(a.value);
             break;
+         case A_RANGE:
+            dump_range(a.range);
+            printf(" => ");
+            dump_expr(a.value);
+            break;
          default:
             assert(false);
          }
@@ -111,19 +132,15 @@ static void dump_expr(tree_t t)
       break;
 
    case T_ARRAY_REF:
-      printf("%s", istr(tree_ident(tree_ref(t))));
+      dump_expr(tree_value(t));
       dump_params(t);
       break;
 
    case T_ARRAY_SLICE:
-      {
-         range_t r = tree_range(t);
-         printf("%s(", istr(tree_ident(tree_ref(t))));
-         dump_expr(r.left);
-         printf(" %s ", r.kind == RANGE_TO ? "to" : "downto");
-         dump_expr(r.right);
-         printf(")");
-      }
+      dump_expr(tree_value(t));
+      printf("(");
+      dump_range(tree_range(t));
+      printf(")");
       break;
 
    case T_TYPE_CONV:
@@ -200,13 +217,8 @@ static void dump_decl(tree_t t, int indent)
          type_t type = tree_type(t);
          switch (type_kind(type)) {
          case T_INTEGER:
-            {
-               range_t r = type_dim(type, 0);
-               printf("range ");
-               dump_expr(r.left);
-               printf(r.kind == RANGE_TO ? " to " : " downto ");
-               dump_expr(r.right);
-            }
+            printf("range ");
+            dump_range(type_dim(type, 0));
             break;
          default:
             dump_type(type);

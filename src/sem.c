@@ -202,7 +202,9 @@ static bool scope_can_overload(tree_t t)
 static bool scope_hides(tree_t a, tree_t b)
 {
    // True if declaration of b hides a
-   if (type_eq(tree_type(a), tree_type(b))) {
+   if ((tree_kind(a) == T_COMPONENT) || (tree_kind(b) == T_COMPONENT))
+      return false;
+   else if (type_eq(tree_type(a), tree_type(b))) {
       return (tree_attr_str(a, builtin_i) != NULL)
          && (tree_attr_str(b, builtin_i) == NULL);
    }
@@ -1731,14 +1733,9 @@ static bool sem_check_package_body(tree_t t)
    return ok;
 }
 
-static bool sem_check_entity(tree_t t)
+static bool sem_check_generics(tree_t t)
 {
-   assert(top_scope == NULL);
-   scope_push(NULL);
-
-   bool ok = sem_check_context(t);
-
-   scope_push(NULL);
+   bool ok = true;
 
    for (unsigned n = 0; n < tree_generics(t); n++) {
       tree_t g = tree_generic(t, n);
@@ -1756,9 +1753,18 @@ static bool sem_check_entity(tree_t t)
       ok = sem_check(g) && ok;
    }
 
-   // Make generics visible in this region
-   for (unsigned n = 0; n < tree_generics(t); n++)
-      ok = scope_insert(tree_generic(t, n)) && ok;
+   if (ok) {
+      // Make generics visible in this region
+      for (unsigned n = 0; n < tree_generics(t); n++)
+         ok = scope_insert(tree_generic(t, n)) && ok;
+   }
+
+   return ok;
+}
+
+static bool sem_check_ports(tree_t t)
+{
+   bool ok = true;
 
    for (unsigned n = 0; n < tree_ports(t); n++) {
       tree_t p = tree_port(t, n);
@@ -1768,6 +1774,36 @@ static bool sem_check_entity(tree_t t)
 
       ok = sem_check(p) && ok;
    }
+
+   return ok;
+}
+
+static bool sem_check_component(tree_t t)
+{
+   scope_push(NULL);
+
+   bool ok = sem_check_generics(t) && sem_check_ports(t);
+
+   scope_pop();
+
+   if (ok) {
+      scope_apply_prefix(t);
+      return scope_insert(t);
+   }
+   else
+      return false;
+}
+
+static bool sem_check_entity(tree_t t)
+{
+   assert(top_scope == NULL);
+   scope_push(NULL);
+
+   bool ok = sem_check_context(t);
+
+   scope_push(NULL);
+
+   ok = ok && sem_check_generics(t) && sem_check_ports(t);
 
    scope_pop();
    scope_pop();
@@ -1834,6 +1870,27 @@ static bool sem_check_arch(tree_t t)
    return ok;
 }
 
+static tree_t sem_check_lvalue(tree_t t)
+{
+   switch (tree_kind(t)) {
+   case T_REF:
+      return sem_check_lvalue(tree_ref(t));
+   case T_ARRAY_SLICE:
+   case T_ARRAY_REF:
+   case T_ALIAS:
+      return sem_check_lvalue(tree_value(t));
+   case T_VAR_DECL:
+   case T_SIGNAL_DECL:
+   case T_PORT_DECL:
+   case T_CONST_DECL:
+      return t;
+   default:
+      error_at(tree_loc(t), "not a suitable l-value");
+      ++errors;
+      return NULL;
+   }
+}
+
 static bool sem_check_var_assign(tree_t t)
 {
    tree_t target = tree_target(t);
@@ -1851,10 +1908,9 @@ static bool sem_check_var_assign(tree_t t)
    if (!ok)
       return false;
 
-   tree_t decl = tree_ref(target);
-
-   while (tree_kind(decl) == T_ALIAS)
-      decl = tree_ref(tree_value(decl));
+   tree_t decl = sem_check_lvalue(target);
+   if (decl == NULL)
+      return false;
 
    bool suitable = (tree_kind(decl) == T_VAR_DECL)
       || (tree_kind(decl) == T_PORT_DECL && tree_class(decl) == C_VARIABLE);
@@ -1905,9 +1961,9 @@ static bool sem_check_waveforms(tree_t t, type_t expect)
 
 static bool sem_check_signal_target(tree_t target)
 {
-   tree_t decl = tree_ref(target);
-   while (tree_kind(decl) == T_ALIAS)
-      decl = tree_ref(tree_value(decl));
+   tree_t decl = sem_check_lvalue(target);
+   if (decl == NULL)
+      return false;
 
    switch (tree_kind(decl)) {
    case T_SIGNAL_DECL:
@@ -2921,7 +2977,6 @@ static bool sem_check_array_ref(tree_t t)
    }
 
    tree_set_type(t, type_elem(type));
-   tree_set_ref(t, tree_ref(value));
    return ok;
 }
 
@@ -2958,7 +3013,6 @@ static bool sem_check_array_slice(tree_t t)
    type_set_base(slice_type, array_type);
    type_add_dim(slice_type, tree_range(t));
 
-   tree_set_ref(t, tree_ref(tree_value(t)));
    tree_set_type(t, slice_type);
    return true;
 }
@@ -3381,6 +3435,46 @@ static bool sem_check_select(tree_t t)
    return true;
 }
 
+static bool sem_check_attr_decl(tree_t t)
+{
+   type_t type = tree_type(t);
+   if (!sem_check_type(t, &type))
+      return false;
+
+   tree_set_type(t, type);
+
+   scope_apply_prefix(t);
+   return scope_insert(t);
+}
+
+static bool sem_check_attr_spec(tree_t t)
+{
+   tree_t attr_decl = scope_find(tree_ident(t));
+   if (attr_decl == NULL)
+      sem_error(t, "undefined attribute %s", istr(tree_ident(t)));
+
+   tree_t obj_decl = scope_find(tree_ident2(t));
+   if (obj_decl == NULL)
+      sem_error(t, "undefined identifier %s", istr(tree_ident2(t)));
+
+   if (tree_kind(attr_decl) != T_ATTR_DECL)
+      sem_error(t, "name %s is not an attribute declaration",
+                istr(tree_ident(t)));
+
+   type_t type = tree_type(attr_decl);
+
+   tree_t value = tree_value(t);
+   if (!sem_check_constrained(value, type))
+      return false;
+
+   if (!type_eq(type, tree_type(value)))
+      sem_error(t, "expected attribute type %s", type_pp(type));
+
+   tree_add_attr_tree(obj_decl, tree_ident(t), value);
+
+   return true;
+}
+
 static void sem_intern_strings(void)
 {
    // Intern some commonly used strings
@@ -3476,6 +3570,12 @@ bool sem_check(tree_t t)
       return sem_check_pcall(t);
    case T_SELECT:
       return sem_check_select(t);
+   case T_ATTR_SPEC:
+      return sem_check_attr_spec(t);
+   case T_ATTR_DECL:
+      return sem_check_attr_decl(t);
+   case T_COMPONENT:
+      return sem_check_component(t);
    default:
       sem_error(t, "cannot check tree kind %d", tree_kind(t));
    }
