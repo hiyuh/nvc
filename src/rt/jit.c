@@ -84,6 +84,9 @@ static void jit_native_name(const char *name, char *buf, size_t len)
 
 void *jit_var_ptr(const char *name)
 {
+   char dlname[256];
+   void *sym;
+   const char *error;
    if (using_jit) {
       LLVMValueRef var = LLVMGetNamedGlobal(module, name);
       if (var == NULL)
@@ -93,10 +96,9 @@ void *jit_var_ptr(const char *name)
    }
    else {
       dlerror();   // Clear any previous error
-      char dlname[256];
       jit_native_name(name, dlname, sizeof(dlname));
-      void *sym = dlsym(dl_handle, dlname);
-      const char *error = dlerror();
+      sym = dlsym(dl_handle, dlname);
+      error = dlerror();
       if (error != NULL)
          fatal("%s", error);
       return sym;
@@ -153,10 +155,11 @@ static time_t jit_mod_time(const char *path)
 
 void jit_init(ident_t top)
 {
+   char bc_fname[64], so_fname[64];
+   char bc_path[PATH_MAX], so_path[PATH_MAX];
    ident_t orig = ident_strip(top, ident_new(".elab"));
    ident_t final = ident_prefix(orig, ident_new("final"), '.');
 
-   char bc_fname[64], so_fname[64];;
    snprintf(bc_fname, sizeof(bc_fname), "_%s.bc", istr(final));
    // TODO: different on OS X, etc.
 #if defined __CYGWIN__
@@ -165,7 +168,6 @@ void jit_init(ident_t top)
    snprintf(so_fname, sizeof(so_fname), "_%s.so", istr(final));
 #endif
 
-   char bc_path[PATH_MAX], so_path[PATH_MAX];
    lib_realpath(lib_work(), bc_fname, bc_path, sizeof(bc_path));
    lib_realpath(lib_work(), so_fname, so_path, sizeof(so_path));
 

@@ -27,7 +27,8 @@ static bool pp_char_enum(type_t type)
 {
    bool all_char = true;
    unsigned nlit = type_enum_literals(type);
-   for (unsigned i = 0; i < nlit; i++) {
+   unsigned i;
+   for (i = 0; i < nlit; i++) {
       tree_t lit = type_enum_literal(type, i);
       all_char = all_char && (ident_char(tree_ident(lit), 0) == '\'');
    }
@@ -36,14 +37,15 @@ static bool pp_char_enum(type_t type)
 
 static size_t pp_one(char *p, size_t len, type_t type, uint64_t value)
 {
+   const char *s;
    switch (type_kind(type)) {
    case T_INTEGER:
-      return snprintf(p, len, "%"PRIu64, value);
+      return snprintf(p, len, "%llu", value);
 
    case T_ENUM:
       {
          assert(value < type_enum_literals(type));
-         const char *s = istr(tree_ident(type_enum_literal(type, value)));
+         s = istr(tree_ident(type_enum_literal(type, value)));
          if (*s == '\'')
             return snprintf(p, len, "%c", *(s + 1));
          else
@@ -51,7 +53,7 @@ static size_t pp_one(char *p, size_t len, type_t type, uint64_t value)
       }
 
    default:
-      return snprintf(p, len, "%"PRIx64, value);
+      return snprintf(p, len, "%llx", value);
    }
 }
 
@@ -61,24 +63,27 @@ const char *pprint(tree_t t, uint64_t *values, unsigned len)
 
    char *p = buf;
    const char *end = buf + sizeof(buf);
+   bool all_char;
+   unsigned left, right;
+   int step;
+   unsigned i;
 
    type_t type = tree_type(t);
 
    if (type_is_array(type)) {
       type_t elem = type_base_recur(type_elem(type));
-      bool all_char = pp_char_enum(elem);
+      all_char = pp_char_enum(elem);
 
       p += snprintf(p, end - p, all_char ? "\"" : "(");
 
-      unsigned left = 0, right = len - 1;
-      int step = 1;
+      left = 0, right = len - 1, step = 1;
       if (type_dim(type, 0).kind == RANGE_DOWNTO) {
          left  = len - 1;
          right = 0;
          step  = -1;
       }
 
-      for (unsigned i = left; i != right + step; i += step) {
+      for (i = left; i != right + step; i += step) {
          if (!all_char && (i != left))
             p += snprintf(p, end - p, ",");
          p += pp_one(p, end - p, elem, values[i]);

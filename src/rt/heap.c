@@ -99,10 +99,11 @@ void heap_free(heap_t h)
 
 void *heap_extract_min(heap_t h)
 {
+   void *min;
    if (unlikely(h->size < 1))
       fatal("heap underflow");
 
-   void *min = USER(h, 1);
+   min = USER(h, 1);
    NODE(h, 1) = NODE(h, h->size);
    --(h->size);
    min_heapify(h, 1);
@@ -139,6 +140,7 @@ size_t heap_size(heap_t h)
 
 void heap_walk(heap_t h, heap_walk_fn_t fn, void *context)
 {
-   for (size_t i = 1; i <= h->size; i++)
+   size_t i;
+   for (i = 1; i <= h->size; i++)
       (*fn)(KEY(h, i), USER(h, i), context);
 }

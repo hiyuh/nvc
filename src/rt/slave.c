@@ -45,12 +45,12 @@ void slave_post_msg(slave_msg_t msg, const void *args, size_t len)
 void slave_get_msg(slave_msg_t *msg, void *buf, size_t *len)
 {
    ssize_t nr = read(slave_fd, msg, sizeof(slave_msg_t));
+   size_t body_len = 0;
    if (nr < 0)
       fatal_errno("read");
    else if (nr == 0)
       fatal("slave connection terminated\n");
 
-   size_t body_len = 0;
    switch (*msg) {
    case SLAVE_QUIT:
    case SLAVE_RESTART:
@@ -127,9 +127,9 @@ void slave_kill(int sig)
 
 int slave_wait(void)
 {
+   int status;
    assert(am_master);
 
-   int status;
    if (waitpid(slave_pid, &status, 0) < 0)
       fatal("waitpid");
 

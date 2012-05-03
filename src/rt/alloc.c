@@ -28,13 +28,14 @@
 
 rt_alloc_stack_t rt_alloc_stack_new(size_t size)
 {
+   int i;
    struct rt_alloc_stack *s = xmalloc(sizeof(struct rt_alloc_stack));
    s->stack     = xmalloc(sizeof(void *) * INIT_ITEMS);
    s->stack_sz  = INIT_ITEMS;
    s->stack_top = 0;
    s->item_sz   = size;
 
-   for (int i = 0; i < INIT_ITEMS; i++)
+   for (i = 0; i < INIT_ITEMS; i++)
       rt_free(s, xmalloc(size));
 
    return s;
@@ -42,11 +43,12 @@ rt_alloc_stack_t rt_alloc_stack_new(size_t size)
 
 void rt_alloc_stack_destroy(rt_alloc_stack_t s)
 {
+   size_t i;
    if (s->stack_top != s->stack_sz)
       fatal("memory leak of %zu items from %zu byte stack",
             s->stack_sz - s->stack_top, s->item_sz);
 
-   for (size_t i = 0; i < s->stack_sz; i++)
+   for (i = 0; i < s->stack_sz; i++)
       free(s->stack[i]);
 
    free(s->stack);
@@ -55,11 +57,12 @@ void rt_alloc_stack_destroy(rt_alloc_stack_t s)
 
 void *rt_alloc_slow(rt_alloc_stack_t s)
 {
+   size_t i;
    if (s->stack_top == 0) {
       s->stack_sz *= 2;
       s->stack = xrealloc(s->stack, sizeof(void *) * s->stack_sz);
 
-      for (size_t i = 0; i < s->stack_sz / 2; i++)
+      for (i = 0; i < s->stack_sz / 2; i++)
          rt_free(s, xmalloc(s->item_sz));
    }
 

@@ -55,7 +55,7 @@ static const char *vcd_key_fmt(int key)
 
 static int vcd_fmt_int(char *buf, size_t max, uint64_t val, void *arg)
 {
-   return snprintf(buf, max, "h%"PRIx64, val);
+   return snprintf(buf, max, "h%llx", val);
 }
 
 static int vcd_fmt_enum(char *buf, size_t max, uint64_t val, void *arg)
@@ -65,6 +65,8 @@ static int vcd_fmt_enum(char *buf, size_t max, uint64_t val, void *arg)
 
 static bool vcd_set_fmt_fn(tree_t decl)
 {
+   vcd_fmt_fn_t fn = NULL;
+   void *arg = NULL;
    type_t type = tree_type(decl);
 
    if (type_is_array(type))
@@ -72,9 +74,6 @@ static bool vcd_set_fmt_fn(tree_t decl)
 
    while (type_kind(type) == T_SUBTYPE)
       type = type_base(type);
-
-   vcd_fmt_fn_t fn = NULL;
-   void *arg = NULL;
 
    switch (type_kind(type)) {
    case T_INTEGER:
@@ -119,17 +118,20 @@ static const char *vcd_value_fmt(tree_t decl)
    uint64_t vals[MAX_VAR_WIDTH];
    int w = rt_signal_value(decl, vals, MAX_VAR_WIDTH);
    type_t type = tree_type(decl);
+   int i;
+   char *p;
+   const char *end;
    if (type_is_array(type)) {
-      char *p = buf;
-      const char *end = buf + MAX_TEXT_WIDTH;
+      p = buf;
+      end = buf + MAX_TEXT_WIDTH;
       p += snprintf(p, end - p, "b");
 
       if (type_dim(type, 0).kind == RANGE_DOWNTO) {
-         for (int i = w - 1; i >= 0; i--)
+         for (i = w - 1; i >= 0; i--)
             p += (*fn)(p, end - p, vals[i], arg);
       }
       else {
-         for (int i = 0; i < w; i++)
+         for (i = 0; i < w; i++)
             p += (*fn)(p, end - p, vals[i], arg);
       }
    }
@@ -152,7 +154,7 @@ static void vcd_event_cb(uint64_t now, tree_t decl)
    static uint64_t last_time = UINT64_MAX;
 
    if (now != last_time) {
-      fprintf(vcd_file, "#%"PRIu64"\n", now);
+      fprintf(vcd_file, "#%llu\n", now);
       last_time = now;
    }
 
@@ -187,28 +189,35 @@ static void vcd_enter_scope(tree_t decl)
 
 static void vcd_emit_header(void)
 {
+   char tmbuf[64];
+   time_t t;
+   struct tm *tm;
    rewind(vcd_file);
 
-   char tmbuf[64];
-   time_t t = time(NULL);
-   struct tm *tm = localtime(&t);
+   t = time(NULL);
+   tm = localtime(&t);
    strftime(tmbuf, sizeof(tmbuf), "%a, %d %b %Y %T %z", tm);
    fprintf(vcd_file, "$date\n  %s\n$end\n", tmbuf);
 
-   fprintf(vcd_file, "$version\n  "PACKAGE_STRING"\n$end\n");
+   fprintf(vcd_file, "$version\n  " "nvc 0.1" "\n$end\n");
    fprintf(vcd_file, "$timescale\n  1 fs\n$end\n");
 }
 
 void vcd_restart(void)
 {
+   int next_key;
+   unsigned i;
+   type_t type;
+   int w;
+   const char *name;
    if (vcd_file == NULL)
       return;
 
    vcd_emit_header();
 
    n_scopes = 0;
-   int next_key = 0;
-   for (unsigned i = 0; i < tree_decls(vcd_top); i++) {
+   next_key = 0;
+   for (i = 0; i < tree_decls(vcd_top); i++) {
       tree_t d = tree_decl(vcd_top, i);
       if (tree_kind(d) != T_SIGNAL_DECL)
          continue;
@@ -220,8 +229,8 @@ void vcd_restart(void)
 
       tree_add_attr_int(d, i_vcd_key, next_key);
 
-      type_t type = tree_type(d);
-      int w = 1;
+      type = tree_type(d);
+      w = 1;
       if (type_kind(type) == T_CARRAY) {
          int64_t low, high;
          range_bounds(type_dim(type, 0), &low, &high);
@@ -230,7 +239,7 @@ void vcd_restart(void)
 
       vcd_enter_scope(d);
 
-      const char *name = strrchr(istr(tree_ident(d)), ':') + 1;
+      name = strrchr(istr(tree_ident(d)), ':') + 1;
       fprintf(vcd_file, "$var reg %d %s %s $end\n",
               w, vcd_key_fmt(next_key), name);
 
@@ -244,7 +253,7 @@ void vcd_restart(void)
 
    fprintf(vcd_file, "$dumpvars\n");
 
-   for (unsigned i = 0; i < tree_decls(vcd_top); i++) {
+   for (i = 0; i < tree_decls(vcd_top); i++) {
       tree_t d = tree_decl(vcd_top, i);
       if (tree_kind(d) != T_SIGNAL_DECL)
          continue;

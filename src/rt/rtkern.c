@@ -151,7 +151,9 @@ static void *rt_tmp_alloc(size_t sz);
 static tree_t rt_recall_tree(const char *unit, int32_t where);
 static void _tracef(const char *fmt, ...);
 
-#define TRACE(...) if (unlikely(trace_on)) _tracef(__VA_ARGS__)
+#if !defined SPLINT
+ #define TRACE(...) if (unlikely(trace_on)) _tracef(__VA_ARGS__)
+#endif
 
 ////////////////////////////////////////////////////////////////////////////////
 // Utilities
@@ -174,7 +176,7 @@ static const char *fmt_time_r(char *buf, size_t len, uint64_t t)
    while (units[u + 1].unit && (t % units[u + 1].time == 0))
       ++u;
 
-   snprintf(buf, len, "%"PRIu64"%s",
+   snprintf(buf, len, "%llu%s",
             t / units[u].time, units[u].unit);
 
    return buf;
@@ -219,30 +221,30 @@ void _sched_waveform_vec(void *_sig, int32_t source, void *values,
                          int32_t n, int32_t size, int64_t after)
 {
    struct signal *sig = _sig;
-
-   TRACE("_sched_waveform_vec %s source=%d values=%p n=%d size=%d after=%s",
-         fmt_sig(sig), source, values, n, size, fmt_time(after));
-
    const uint8_t  *v8  = values;
    const uint16_t *v16 = values;
    const uint32_t *v32 = values;
    const uint64_t *v64 = values;
+   int i;
+
+   TRACE("_sched_waveform_vec %s source=%d values=%p n=%d size=%d after=%s",
+         fmt_sig(sig), source, values, n, size, fmt_time(after));
 
    switch (size) {
       case 1:
-         for (int i = 0; i < n; i++)
+         for (i = 0; i < n; i++)
             rt_alloc_driver(&sig[i], source, after, v8[i]);
          break;
       case 2:
-         for (int i = 0; i < n; i++)
+         for (i = 0; i < n; i++)
             rt_alloc_driver(&sig[i], source, after, v16[i]);
          break;
       case 4:
-         for (int i = 0; i < n; i++)
+         for (i = 0; i < n; i++)
             rt_alloc_driver(&sig[i], source, after, v32[i]);
          break;
       case 8:
-         for (int i = 0; i < n; i++)
+         for (i = 0; i < n; i++)
             rt_alloc_driver(&sig[i], source, after, v64[i]);
          break;
       default:
@@ -256,7 +258,7 @@ void _sched_waveform(void *_sig, int32_t source, int64_t value, int64_t after)
 {
    struct signal *sig = _sig;
 
-   TRACE("_sched_waveform %s source=%d value=%"PRIx64" after=%s",
+   TRACE("_sched_waveform %s source=%d value=%llx after=%s",
          fmt_sig(sig), source, value, fmt_time(after));
 
    rt_alloc_driver(sig, source, after, value);
@@ -267,11 +269,12 @@ void _sched_waveform(void *_sig, int32_t source, int64_t value, int64_t after)
 void _sched_event(void *_sig, int32_t n)
 {
    struct signal *sig = _sig;
+   int i;
 
    TRACE("_sched_event %s n=%d proc %s", fmt_sig(sig), n,
          istr(tree_ident(active_proc->source)));
 
-   for (int i = 0; i < n; i++) {
+   for (i = 0; i < n; i++) {
       // See if there is already a stale entry in the sensitvity
       // list for this process
       struct sens_list *it = sig[i].sensitive;
@@ -296,6 +299,15 @@ void _sched_event(void *_sig, int32_t n)
 void _assert_fail(const uint8_t *msg, int32_t msg_len, int8_t severity,
                   int32_t where, const char *module)
 {
+   const char *levels[] = {
+      "Note", "Warning", "Error", "Failure"
+   };
+   tree_t t;
+   const loc_t *loc;
+   bool is_report;
+   char *copy;
+   void (*fn)(const loc_t *loc, const char *fmt, ...);
+
    // LRM 93 section 8.2
    // The error message consists of at least
    // a) An indication that this message is from an assertion
@@ -305,22 +317,16 @@ void _assert_fail(const uint8_t *msg, int32_t msg_len, int8_t severity,
 
    assert(severity < 4);
 
-   const char *levels[] = {
-      "Note", "Warning", "Error", "Failure"
-   };
+   t = rt_recall_tree(module, where);
+   loc = tree_loc(t);
+   is_report = tree_attr_int(t, ident_new("is_report"), 0);
 
-   tree_t t = rt_recall_tree(module, where);
-   const loc_t *loc = tree_loc(t);
-   bool is_report = tree_attr_int(t, ident_new("is_report"), 0);
-
-   char *copy = NULL;
+   copy = NULL;
    if (msg_len >= 0) {
       copy = xmalloc(msg_len + 1);
       memcpy(copy, msg, msg_len);
       copy[msg_len] = '\0';
    }
-
-   void (*fn)(const loc_t *loc, const char *fmt, ...);
 
    switch (severity) {
    case 0: fn = note_at; break;
@@ -358,6 +364,7 @@ char *_tmp_alloc(int32_t n, int32_t sz)
 void _array_copy(void *dst, const void *src,
                  int32_t off, int32_t n, int32_t sz, int8_t op)
 {
+   int i;
    TRACE("_array_copy dst=%p+%d src=%p %dx%d op=%d",
          dst, off, src, n, sz, op);
    if (op) {
@@ -373,19 +380,19 @@ void _array_copy(void *dst, const void *src,
 
       switch (sz) {
       case 1:
-         for (int i = n - 1; i >= 0; i--)
+         for (i = n - 1; i >= 0; i--)
             *(d8 + off + i) = *s8++;
          break;
       case 2:
-         for (int i = n - 1; i >= 0; i--)
+         for (i = n - 1; i >= 0; i--)
             *(d16 + off + i) = *s16++;
          break;
       case 4:
-         for (int i = n - 1; i >= 0; i--)
+         for (i = n - 1; i >= 0; i--)
             *(d32 + off + i) = *s32++;
          break;
       case 8:
-         for (int i = n - 1; i >= 0; i--)
+         for (i = n - 1; i >= 0; i--)
             *(d64 + off + i) = *s64++;
          break;
       default:
@@ -398,19 +405,20 @@ void _array_copy(void *dst, const void *src,
 
 void _image(int64_t val, int32_t where, const char *module, struct uarray *u)
 {
+   const size_t max = 32;
+   char *buf;
+   size_t len = 0;
    tree_t t = rt_recall_tree(module, where);
 
    type_t type = tree_type(t);
    while (type_kind(type) == T_SUBTYPE)
       type = type_base(type);
 
-   const size_t max = 32;
-   char *buf = rt_tmp_alloc(max);
-   size_t len = 0;
+   buf = rt_tmp_alloc(max);
 
    switch (type_kind(type)) {
    case T_INTEGER:
-      len = snprintf(buf, max, "%"PRIi64, val);
+      len = snprintf(buf, max, "%lli", val);
       break;
 
    case T_ENUM:
@@ -430,7 +438,7 @@ void _image(int64_t val, int32_t where, const char *module, struct uarray *u)
 
 void _debug_out(int32_t val)
 {
-   printf("DEBUG: val=%"PRIx32"\n", val);
+   printf("DEBUG: val=%x\n", val);
 }
 
 int32_t _iexp(int32_t n, int32_t v)
@@ -462,10 +470,10 @@ void _inst_name(void *_sig, struct uarray *u)
 
 static void _tracef(const char *fmt, ...)
 {
+   char buf[64];
    va_list ap;
    va_start(ap, fmt);
 
-   char buf[64];
    if (iteration < 0)
       fprintf(stderr, "TRACE (init): ");
    else
@@ -553,8 +561,9 @@ static void *rt_tmp_alloc(size_t sz)
 
 static void rt_reset_signal(struct signal *s, tree_t decl, int offset)
 {
+   int i;
    if (s->sources != NULL) {
-      for (int i = 0; i < s->n_sources; i++) {
+      for (i = 0; i < s->n_sources; i++) {
          struct waveform *w, *wnext;
          w = s->sources[i];
          do {
@@ -575,6 +584,9 @@ static void rt_reset_signal(struct signal *s, tree_t decl, int offset)
 
 static void rt_setup(tree_t top)
 {
+   unsigned i, j;
+   struct signal *s;
+   type_t type;
    now = 0;
    iteration = -1;
 
@@ -589,19 +601,19 @@ static void rt_setup(tree_t top)
       procs   = xmalloc(sizeof(struct rt_proc) * n_procs);
    }
 
-   for (unsigned i = 0; i < tree_decls(top); i++) {
+   for (i = 0; i < tree_decls(top); i++) {
       tree_t d = tree_decl(top, i);
       if (tree_kind(d) != T_SIGNAL_DECL)
          continue;
 
-      struct signal *s = jit_var_ptr(istr(tree_ident(d)));
+      s = jit_var_ptr(istr(tree_ident(d)));
 
-      type_t type = tree_type(d);
+      type = tree_type(d);
       if (type_kind(type) == T_CARRAY) {
          int64_t low, high;
          range_bounds(type_dim(type, 0), &low, &high);
 
-         for (unsigned j = 0; j < high - low + 1; j++) {
+         for (j = 0; j < high - low + 1; j++) {
             TRACE("signal %s[%d] at %p", istr(tree_ident(d)), j, &s[j]);
             rt_reset_signal(&s[j], d, j);
          }
@@ -614,7 +626,7 @@ static void rt_setup(tree_t top)
       tree_add_attr_ptr(d, i_signal, s);
    }
 
-   for (unsigned i = 0; i < tree_stmts(top); i++) {
+   for (i = 0; i < tree_stmts(top); i++) {
       tree_t p = tree_stmt(top, i);
       assert(tree_kind(p) == T_PROCESS);
 
@@ -649,7 +661,8 @@ static void rt_initial(void)
 {
    // Initialisation is described in LRM 93 section 12.6.4
 
-   for (size_t i = 0; i < n_procs; i++)
+   size_t i;
+   for (i = 0; i < n_procs; i++)
       rt_run(&procs[i], true /* reset */);
 }
 
@@ -676,6 +689,10 @@ static void rt_wakeup(struct sens_list *sl)
 static void rt_alloc_driver(struct signal *sig, int source,
                             uint64_t after, uint64_t value)
 {
+   struct waveform *dummy;
+   struct waveform *w;
+   struct waveform *it;
+   struct waveform *last;
    // Allocate memory for drivers on demand
    const size_t ptr_sz = sizeof(struct waveform *);
    if (unlikely(sig->sources == NULL)) {
@@ -698,21 +715,21 @@ static void rt_alloc_driver(struct signal *sig, int source,
       // is assumed to have already occured)
       assert(now == 0);
 
-      struct waveform *dummy = rt_alloc(waveform_stack);
+      dummy = rt_alloc(waveform_stack);
       dummy->when  = 0;
       dummy->next  = NULL;
 
       sig->sources[source] = dummy;
    }
 
-   struct waveform *w = rt_alloc(waveform_stack);
+   w = rt_alloc(waveform_stack);
    w->when  = now + after;
    w->next  = NULL;
    w->value = value;
 
    // TODO: transport vs. inertial
 
-   struct waveform *it = sig->sources[source], *last = NULL;
+   it = sig->sources[source]; last = NULL;
    while (it != NULL && it->when <= w->when) {
       last = it;
       it = it->next;
@@ -723,16 +740,16 @@ static void rt_alloc_driver(struct signal *sig, int source,
 
 static void rt_update_signal(struct signal *s, int source, uint64_t value)
 {
-   TRACE("update signal %s value %"PRIx64, fmt_sig(s), value);
-
    int32_t new_flags = 0;
    const bool first_cycle = (iteration == 0 && now == 0);
+   struct sens_list *it, *next;
+   struct signal *base;
+   TRACE("update signal %s value %llx", fmt_sig(s), value);
    if (likely(!first_cycle)) {
       new_flags = SIGNAL_F_ACTIVE;
       if (s->resolved != value) {
          new_flags |= SIGNAL_F_EVENT;
 
-         struct sens_list *it, *next;
          for (it = s->sensitive; it != NULL; it = next) {
             next = it->next;
             rt_wakeup(it);
@@ -750,7 +767,7 @@ static void rt_update_signal(struct signal *s, int source, uint64_t value)
    // Set the update flag on the first element of the vector which
    // will cause the event callback to be executed at the end of
    // the cycle
-   struct signal *base = s - s->offset;
+   base = s - s->offset;
    base->flags |= SIGNAL_F_UPDATE;
 
    // LAST_VALUE is the same as the initial value when
@@ -812,6 +829,8 @@ static void rt_cycle(void)
    // Simulation cycle is described in LRM 93 section 12.6.4
 
    struct event *peek = heap_min(eventq_heap);
+   struct event *event;
+   int i;
 
    if (peek->when > now) {
       now = peek->when;
@@ -839,14 +858,13 @@ static void rt_cycle(void)
          break;
    }
 
-   struct event *event;
    while ((event = rt_pop_run_queue())) {
       switch (event->kind) {
       case E_PROCESS:
          rt_run(event->wake_proc, false /* reset */);
          break;
       case E_DRIVER:
-         for (int i = 0; i < event->length; i++)
+         for (i = 0; i < event->length; i++)
             rt_update_driver(&event->signal[i], event->source);
          break;
       }
@@ -865,7 +883,7 @@ static void rt_cycle(void)
       resume = next;
    }
 
-   for (unsigned i = 0; i < n_active_signals; i++) {
+   for (i = 0; i < n_active_signals; i++) {
       struct signal *s = active_signals[i];
       struct signal *base = s - s->offset;
       s->flags &= ~(SIGNAL_F_ACTIVE | SIGNAL_F_EVENT);
@@ -881,16 +899,18 @@ static void rt_load_unit(const char *name)
 {
    char *tmp = strdup(name);
    const char *lib_name  = strtok(tmp, ".");
+   tree_rd_ctx_t ctx;
+   struct loaded *l;
 
    lib_t lib = lib_find(lib_name, true, true);
    if (lib == NULL)
       fatal("cannot continue");
 
-   tree_rd_ctx_t ctx = NULL;
+   ctx = NULL;
    if (lib_get_ctx(lib, ident_new(name), &ctx) == NULL)
       fatal("cannot find unit %s", name);
 
-   struct loaded *l = xmalloc(sizeof(struct loaded));
+   l = xmalloc(sizeof(struct loaded));
    l->next     = NULL;
    l->name     = name;
    l->read_ctx = ctx;
@@ -946,7 +966,8 @@ static void rt_one_time_init(void)
 
 static void rt_cleanup_signal(struct signal *sig)
 {
-   for (int j = 0; j < sig->n_sources; j++) {
+   int j;
+   for (j = 0; j < sig->n_sources; j++) {
       while (sig->sources[j] != NULL) {
          struct waveform *next = sig->sources[j]->next;
          rt_free(waveform_stack, sig->sources[j]);
@@ -964,6 +985,9 @@ static void rt_cleanup_signal(struct signal *sig)
 
 static void rt_cleanup(tree_t top)
 {
+   unsigned i, j;
+   struct signal *sig;
+   type_t type;
    assert(resume == NULL);
 
    while (heap_size(eventq_heap) > 0)
@@ -972,20 +996,20 @@ static void rt_cleanup(tree_t top)
    heap_free(eventq_heap);
    eventq_heap = NULL;
 
-   for (unsigned i = 0; i < tree_decls(top); i++) {
+   for (i = 0; i < tree_decls(top); i++) {
       tree_t d = tree_decl(top, i);
       if (tree_kind(d) != T_SIGNAL_DECL)
          continue;
 
-      struct signal *sig = tree_attr_ptr(d, i_signal);
+      sig = tree_attr_ptr(d, i_signal);
 
-      type_t type = tree_type(d);
+      type = tree_type(d);
       if (type_kind(type) == T_CARRAY) {
          int64_t low, high;
          range_bounds(type_dim(type, 0), &low, &high);
 
-         for (unsigned i = 0; i < high - low + 1; i++)
-            rt_cleanup_signal(&sig[i]);
+         for (j = 0; j < high - low + 1; j++)
+            rt_cleanup_signal(&sig[j]);
       }
       else
          rt_cleanup_signal(sig);
@@ -1016,14 +1040,16 @@ static unsigned rt_tv2ms(struct timeval *tv)
 static void rt_stats_print(void)
 {
    struct rusage final_rusage;
+   unsigned ready_u, ready_s;
+   unsigned final_u, final_s;
    if (getrusage(RUSAGE_SELF, &final_rusage) < 0)
       fatal_errno("getrusage");
 
-   unsigned ready_u = rt_tv2ms(&ready_rusage.ru_utime);
-   unsigned ready_s = rt_tv2ms(&ready_rusage.ru_stime);
+   ready_u = rt_tv2ms(&ready_rusage.ru_utime);
+   ready_s = rt_tv2ms(&ready_rusage.ru_stime);
 
-   unsigned final_u = rt_tv2ms(&final_rusage.ru_utime);
-   unsigned final_s = rt_tv2ms(&final_rusage.ru_stime);
+   final_u = rt_tv2ms(&final_rusage.ru_utime);
+   final_s = rt_tv2ms(&final_rusage.ru_stime);
 
    notef("setup:%ums run:%ums maxrss:%ldkB",
          ready_u + ready_s,
@@ -1060,25 +1086,31 @@ static void rt_slave_run(slave_run_msg_t *msg)
 
 static void rt_slave_read_signal(slave_read_signal_msg_t *msg)
 {
+   type_t type;
+   int64_t low, high;
+   struct signal *sig;
+   size_t rsz;
+   reply_read_signal_msg_t *reply;
+   unsigned i;
    tree_t t = tree_read_recall(tree_rd_ctx, msg->index);
    assert(tree_kind(t) == T_SIGNAL_DECL);
 
-   type_t type = tree_type(t);
+   type = tree_type(t);
 
-   int64_t low = 0, high = 0;
+   low = 0, high = 0;
    if (type_kind(type) == T_CARRAY)
       range_bounds(type_dim(type, 0), &low, &high);
 
    assert(msg->len <= high - low + 1);
 
-   struct signal *sig = tree_attr_ptr(t, i_signal);
+   sig = tree_attr_ptr(t, i_signal);
 
-   const size_t rsz =
+   rsz =
       sizeof(reply_read_signal_msg_t) + (msg->len * sizeof(uint64_t));
-   reply_read_signal_msg_t *reply = xmalloc(rsz);
+   reply = xmalloc(rsz);
 
    reply->len = msg->len;
-   for (unsigned i = 0; i < msg->len; i++)
+   for (i = 0; i < msg->len; i++)
       reply->values[i] = sig[i].resolved;
 
    slave_post_msg(REPLY_READ_SIGNAL, reply, rsz);
@@ -1128,9 +1160,10 @@ void rt_slave_exec(tree_t e, tree_rd_ctx_t ctx)
 
 void rt_set_event_cb(tree_t s, sig_event_fn_t fn)
 {
+   struct signal *sig;
    assert(tree_kind(s) == T_SIGNAL_DECL);
 
-   struct signal *sig = tree_attr_ptr(s, i_signal);
+   sig = tree_attr_ptr(s, i_signal);
    assert(sig != NULL);
 
    sig->event_cb = fn;
@@ -1138,21 +1171,26 @@ void rt_set_event_cb(tree_t s, sig_event_fn_t fn)
 
 size_t rt_signal_value(tree_t decl, uint64_t *buf, size_t max)
 {
+   type_t type;
+   int64_t low, high;
+   struct signal *base;
+   size_t n_vals;
+   unsigned i;
    assert(tree_kind(decl) == T_SIGNAL_DECL);
 
-   type_t type = tree_type(decl);
+   type = tree_type(decl);
 
-   int64_t low = 0, high = 0;
+   low = 0, high = 0;
    if (type_kind(type) == T_CARRAY) {
       range_bounds(type_dim(type, 0), &low, &high);
    }
-   struct signal *base = tree_attr_ptr(decl, i_signal);
+   base = tree_attr_ptr(decl, i_signal);
 
-   size_t n_vals = high - low + 1;
+   n_vals = high - low + 1;
    if (n_vals > max)
       n_vals = max;
 
-   for (unsigned i = 0; i < n_vals; i++)
+   for (i = 0; i < n_vals; i++)
       buf[i] = base[i].resolved;
 
    return n_vals;
