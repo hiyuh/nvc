@@ -90,7 +90,8 @@ struct tree {
       tree_t   target;             // T_VAR_ASSIGN, T_SIGNAL_ASSIGN
       tree_t   ref;                // T_REF, T_FCALL, T_ARRAY_REF, T_PCALL
       tree_t   severity;           // T_ASSERT
-      unsigned pos;                // T_ENUM_LIT;
+      tree_t   file_mode;          // T_FILE_DECL
+      unsigned pos;                // T_ENUM_LIT
    };
    union {
       struct {                     // T_AGGREGATE
@@ -148,7 +149,7 @@ struct tree_rd_ctx {
     || IS(t, T_TYPE_DECL) || IS(t, T_CONST_DECL)                      \
     || IS(t, T_FUNC_DECL) || IS(t, T_FUNC_BODY) || IS(t, T_ALIAS)     \
     || IS(t, T_ATTR_DECL) || IS(t, T_ATTR_SPEC) || IS(t, T_PROC_DECL) \
-    || IS(t, T_PROC_BODY) || IS(t, T_COMPONENT))
+    || IS(t, T_PROC_BODY) || IS(t, T_COMPONENT) || IS(t, T_FILE_DECL))
 #define IS_EXPR(t)                                                    \
    (IS(t, T_FCALL) || IS(t, T_LITERAL) || IS(t, T_REF)                \
     || IS(t, T_QUALIFIED) || IS(t, T_AGGREGATE) || IS(t, T_ATTR_REF)  \
@@ -160,7 +161,8 @@ struct tree_rd_ctx {
     || IS(t, T_IF) || IS(t, T_NULL) || IS(t, T_RETURN)                \
     || IS(t, T_CASSIGN) || IS(t, T_WHILE) || IS(t, T_FOR)             \
     || IS(t, T_EXIT) || IS(t, T_PCALL) || IS(t, T_CASE)               \
-    || IS(t, T_BLOCK) || IS(t, T_SELECT))
+    || IS(t, T_BLOCK) || IS(t, T_SELECT) || IS(t, T_IF_GENERATE)      \
+    || IS(t, T_FOR_GENERATE))
 #define HAS_IDENT(t)                                                  \
    (IS(t, T_ENTITY) || IS(t, T_PORT_DECL) || IS(t, T_FCALL)           \
     || IS(t, T_ARCH) || IS(t, T_SIGNAL_DECL) || IS_STMT(t)            \
@@ -172,10 +174,12 @@ struct tree_rd_ctx {
     || IS(t, T_ALIAS) || IS(t, T_ATTR_DECL) || IS(t, T_ATTR_SPEC)     \
     || IS(t, T_PROC_DECL) || IS(t, T_PROC_BODY) || IS(t, T_EXIT)      \
     || IS(t, T_PCALL) || IS(t, T_CASE) || IS(t, T_BLOCK)              \
-    || IS(t, T_SELECT) || IS(t, T_COMPONENT))
+    || IS(t, T_SELECT) || IS(t, T_COMPONENT) || IS(t, T_IF_GENERATE)  \
+    || IS(t, T_FOR_GENERATE) || IS(t, T_FILE_DECL))
 #define HAS_IDENT2(t)                                                 \
    (IS(t, T_ARCH) || IS(t, T_ATTR_REF) || IS(t, T_INSTANCE)           \
-    || IS(t, T_FOR) || IS(t, T_ATTR_SPEC) || IS(t, T_PCALL))
+    || IS(t, T_FOR) || IS(t, T_ATTR_SPEC) || IS(t, T_PCALL)           \
+    || IS(t, T_FOR_GENERATE))
 #define HAS_PORTS(t)                                                  \
    (IS(t, T_ENTITY) || IS(t, T_FUNC_DECL) || IS(t, T_FUNC_BODY)       \
     || IS(t, T_PROC_DECL) || IS(t, T_PROC_BODY) || IS(t, T_COMPONENT))
@@ -185,7 +189,7 @@ struct tree_rd_ctx {
     || IS(t, T_TYPE_DECL) || IS_EXPR(t) || IS(t, T_ENUM_LIT)          \
     || IS(t, T_CONST_DECL) || IS(t, T_FUNC_DECL)                      \
     || IS(t, T_FUNC_BODY) || IS(t, T_ALIAS) || IS(t, T_ATTR_DECL)     \
-    || IS(t, T_PROC_DECL) || IS(t, T_PROC_BODY))
+    || IS(t, T_PROC_DECL) || IS(t, T_PROC_BODY) || IS(t, T_FILE_DECL))
 #define HAS_PARAMS(t)                                                 \
    (IS(t, T_FCALL) || IS(t, T_ATTR_REF) || IS(t, T_ARRAY_REF)         \
     || IS(t, T_INSTANCE) || IS(t, T_PCALL) || IS(t, T_CONCAT)         \
@@ -193,12 +197,14 @@ struct tree_rd_ctx {
 #define HAS_DECLS(t)                                                  \
    (IS(t, T_ARCH) || IS(t, T_PROCESS) || IS(t, T_PACKAGE)             \
     || IS(t, T_ELAB) || IS(t, T_PACK_BODY) || IS(t, T_FOR)            \
-    || IS(t, T_FUNC_BODY) || IS(t, T_PROC_BODY) || IS(t, T_BLOCK))
+    || IS(t, T_FUNC_BODY) || IS(t, T_PROC_BODY) || IS(t, T_BLOCK)     \
+    || IS(t, T_IF_GENERATE) || IS(t, T_FOR_GENERATE))
 #define HAS_TRIGGERS(t) (IS(t, T_WAIT) || IS(t, T_PROCESS))
 #define HAS_STMTS(t)                                                  \
    (IS(t, T_ARCH) || IS(t, T_PROCESS) || IS(t, T_ELAB) || IS(t, T_IF) \
     || IS(t, T_FUNC_BODY) || IS(t, T_WHILE) || IS(t, T_FOR)           \
-    || IS(t, T_PROC_BODY) || IS(t, T_BLOCK))
+    || IS(t, T_PROC_BODY) || IS(t, T_BLOCK) || IS(t, T_IF_GENERATE)   \
+    || IS(t, T_FOR_GENERATE))
 #define HAS_DELAY(t) (IS(t, T_WAIT) || IS(t, T_WAVEFORM))
 #define HAS_TARGET(t)                                                 \
    (IS(t, T_VAR_ASSIGN) || IS(t, T_SIGNAL_ASSIGN)                     \
@@ -209,16 +215,19 @@ struct tree_rd_ctx {
     || IS(t, T_ATTR_REF) || IS(t, T_ARRAY_REF) || IS(t, T_CASE)       \
     || IS(t, T_ARRAY_SLICE) || IS(t, T_IF) || IS(t, T_RETURN)         \
     || IS(t, T_WHILE) || IS(t, T_ALIAS) || IS(t, T_ATTR_SPEC)         \
-    || IS(t, T_EXIT) || IS(t, T_COND) || IS(t, T_SELECT))
+    || IS(t, T_EXIT) || IS(t, T_COND) || IS(t, T_SELECT)              \
+    || IS(t, T_IF_GENERATE) || IS(t, T_FILE_DECL))
 #define HAS_CONTEXT(t)                                                \
    (IS(t, T_ARCH) || IS(t, T_ENTITY) || IS(t, T_PACKAGE)              \
     || IS(t, T_PACK_BODY) || IS(t, T_ELAB))
 #define HAS_REF(t)                                                    \
    (IS(t, T_REF) || IS(t, T_FCALL) || IS(t, T_ATTR_REF)               \
-    || IS(t, T_INSTANCE) || IS(t, T_PCALL) || IS(t, T_TYPE_CONV))
+    || IS(t, T_INSTANCE) || IS(t, T_PCALL) || IS(t, T_TYPE_CONV)      \
+    || IS(t, T_FOR_GENERATE))
 #define HAS_WAVEFORMS(t)                                              \
    (IS(t, T_SIGNAL_ASSIGN) || IS(t, T_COND))
-#define HAS_RANGE(t) (IS(t, T_ARRAY_SLICE) || IS(t, T_FOR))
+#define HAS_RANGE(t)                                                  \
+   (IS(t, T_ARRAY_SLICE) || IS(t, T_FOR) || IS(t, T_FOR_GENERATE))
 #define HAS_CLASS(t) (IS(t, T_PORT_DECL))
 #define HAS_ASSOCS(t)                                                 \
    (IS(t, T_AGGREGATE) || IS(t, T_CASE)|| IS(t, T_SELECT))
@@ -1090,6 +1099,23 @@ void tree_set_reject(tree_t t, tree_t r)
    t->reject = r;
 }
 
+tree_t tree_file_mode(tree_t t)
+{
+   assert(t != NULL);
+   assert(IS(t, T_FILE_DECL));
+
+   return t->file_mode;
+}
+
+void tree_set_file_mode(tree_t t, tree_t m)
+{
+   assert(t != NULL);
+   assert(m != NULL);
+   assert(IS(t, T_FILE_DECL));
+
+   t->file_mode = m;
+}
+
 uint32_t tree_index(tree_t t)
 {
    assert(t != NULL);
@@ -1313,6 +1339,8 @@ static unsigned tree_visit_aux(tree_t t, tree_visit_fn_t fn, void *context,
       n += tree_visit_p(&t->genmaps, fn, context, kind, generation, deep);
    else if (IS(t, T_IF))
       n += tree_visit_a(&t->elses, fn, context, kind, generation, deep);
+   else if (IS(t, T_FILE_DECL))
+      n += tree_visit_aux(t->file_mode, fn, context, kind, generation, deep);
 
    if (deep) {
       for (unsigned i = 0; i < t->n_attrs; i++) {
@@ -1632,6 +1660,10 @@ void tree_write(tree_t t, tree_wr_ctx_t ctx)
       write_a(&t->elses, ctx);
       break;
 
+   case T_FILE_DECL:
+      tree_write(t->file_mode, ctx);
+      break;
+
    default:
       break;
    }
@@ -1800,6 +1832,10 @@ tree_t tree_read(tree_rd_ctx_t ctx)
 
    case T_IF:
       read_a(&t->elses, ctx);
+      break;
+
+   case T_FILE_DECL:
+      t->file_mode = tree_read(ctx);
       break;
 
    default:
@@ -2122,6 +2158,10 @@ static tree_t tree_rewrite_aux(tree_t t, struct rewrite_ctx *ctx)
       rewrite_a(&t->elses, ctx);
       break;
 
+   case T_FILE_DECL:
+      tree_set_file_mode(t, tree_rewrite_aux(t->file_mode, ctx));
+      break;
+
    default:
       break;
    }
@@ -2322,6 +2362,10 @@ static tree_t tree_copy_aux(tree_t t, struct tree_copy_ctx *ctx)
 
    case T_IF:
       copy_a(&t->elses, &copy->elses, ctx);
+      break;
+
+   case T_FILE_DECL:
+      copy->file_mode = tree_copy_aux(t->file_mode, ctx);
       break;
 
    default:

@@ -330,6 +330,9 @@ static bool scope_import_unit(context_t ctx, lib_t lib, bool all)
 
    for (unsigned n = 0; n < tree_decls(unit); n++) {
       tree_t decl = tree_decl(unit, n);
+      if (tree_kind(decl) == T_ATTR_SPEC)
+         continue;
+
       if (!sem_declare(decl))
          return false;
 
@@ -552,7 +555,9 @@ static void sem_declare_predefined_ops(tree_t decl)
    type_t std_bool = sem_std_type("BOOLEAN");
    type_t std_int  = sem_std_type("INTEGER");
 
-   switch (type_kind(t)) {
+   type_kind_t kind = type_kind(t);
+
+   switch (kind) {
    case T_SUBTYPE:
       // Use operators of base type
       break;
@@ -649,7 +654,7 @@ static void sem_declare_predefined_ops(tree_t decl)
    }
 
    bool vec_logical = false;
-   if (type_kind(t) == T_CARRAY || type_kind(t) == T_UARRAY) {
+   if (kind == T_CARRAY || kind == T_UARRAY) {
       type_t base = type_elem(t);
       vec_logical = (type_ident(base) == boolean_i
                      || type_ident(base) == bit_i);
@@ -667,7 +672,7 @@ static void sem_declare_predefined_ops(tree_t decl)
 
    // Predefined attributes
 
-   switch (type_kind(t)) {
+   switch (kind) {
    case T_INTEGER:
    case T_REAL:
    case T_PHYSICAL:
@@ -714,6 +719,16 @@ static void sem_declare_predefined_ops(tree_t decl)
 
    default:
       break;
+   }
+
+   bool array_attrs = ((kind == T_CARRAY)
+                       || (kind == T_SUBTYPE && type_is_array(t)));
+   if (array_attrs) {
+      ident_t length_i = ident_new("LENGTH");
+      tree_add_attr_tree(decl, length_i,
+                         sem_builtin_fn(length_i,
+                                        sem_std_type("INTEGER"),
+                                        "length", t, NULL));
    }
 
    switch (type_kind(t)) {
@@ -764,17 +779,30 @@ static bool sem_check_subtype(tree_t t, type_t type, type_t *pbase)
       // If the subtype is not constrained then give it the same
       // range as its base type
       if (type_dims(type) == 0) {
-         if (type_kind(base) == T_ENUM) {
-            range_t r = {
-               .kind  = RANGE_TO,
-               .left  = sem_make_int(0),
-               .right = sem_make_int(type_enum_literals(base) - 1)
-            };
-            type_add_dim(type, r);
-         }
-         else {
+         switch (type_kind(base)) {
+         case T_ENUM:
+            {
+               range_t r = {
+                  .kind  = RANGE_TO,
+                  .left  = sem_make_int(0),
+                  .right = sem_make_int(type_enum_literals(base) - 1)
+               };
+               type_add_dim(type, r);
+            }
+            break;
+
+         case T_UARRAY:
+            sem_error(t, "sorry, this form of subtype is not supported");
+
+         case T_CARRAY:
+         case T_SUBTYPE:
+         case T_INTEGER:
             for (unsigned i = 0; i < type_dims(base); i++)
                type_add_dim(type, type_dim(base, i));
+            break;
+
+         default:
+            assert(false);
          }
       }
 
@@ -1064,7 +1092,7 @@ static bool sem_check_type(tree_t t, type_t *ptype)
       return true;
 
    default:
-      abort();
+      assert(false);
    }
 }
 
@@ -1236,7 +1264,24 @@ static void sem_add_attributes(tree_t decl)
    type_t type = tree_type(decl);
    type_kind_t kind = type_kind(type);
 
-   if (kind == T_CARRAY) {
+   if (kind == T_UARRAY) {
+      const char *funs[] = { "LOW", "HIGH", "LEFT", "RIGHT", NULL };
+      const char *impl[] = { "uarray_low", "uarray_high", "uarray_left",
+                             "uarray_right", NULL };
+      const char **f, **imp;
+      for (f = funs, imp = impl; *f != NULL; f++, imp++) {
+         ident_t id = ident_new(*f);
+         tree_add_attr_tree(decl, id,
+                            sem_builtin_fn(id, type_index_constr(type, 0),
+                                           *imp, type, NULL));
+      }
+
+      ident_t asc_i = ident_new("ASCENDING");
+      tree_add_attr_tree(decl, asc_i,
+                         sem_builtin_fn(asc_i, std_bool,
+                                        "uarray_asc", type, NULL));
+   }
+   else if (type_is_array(type)) {
       range_t r = type_dim(type, 0);
 
       tree_add_attr_tree(decl, ident_new("LEFT"), r.left);
@@ -1261,25 +1306,8 @@ static void sem_add_attributes(tree_t decl)
          tree_add_attr_tree(decl, ident_new("LOW"), r.right);
       }
    }
-   else if (kind == T_UARRAY) {
-      const char *funs[] = { "LOW", "HIGH", "LEFT", "RIGHT", NULL };
-      const char *impl[] = { "uarray_low", "uarray_high", "uarray_left",
-                             "uarray_right", NULL };
-      const char **f, **imp;
-      for (f = funs, imp = impl; *f != NULL; f++, imp++) {
-         ident_t id = ident_new(*f);
-         tree_add_attr_tree(decl, id,
-                            sem_builtin_fn(id, type_index_constr(type, 0),
-                                           *imp, type, NULL));
-      }
 
-      ident_t asc_i = ident_new("ASCENDING");
-      tree_add_attr_tree(decl, asc_i,
-                         sem_builtin_fn(asc_i, std_bool,
-                                        "uarray_asc", type, NULL));
-   }
-
-   if (kind == T_UARRAY || kind == T_CARRAY) {
+   if (type_is_array(type)) {
       ident_t length_i = ident_new("LENGTH");
       tree_add_attr_tree(decl, length_i,
                          sem_builtin_fn(length_i,
@@ -1356,6 +1384,11 @@ static bool sem_check_decl(tree_t t)
       return false;
 
    tree_set_type(t, type);
+
+   tree_kind_t kind = tree_kind(t);
+
+   if (!tree_has_value(t) && kind == T_CONST_DECL )
+      sem_error(t, "constant declaration must have an initial value");
 
    if (!tree_has_value(t) && (tree_kind(t) != T_PORT_DECL))
       tree_set_value(t, sem_default_value(type));
@@ -1665,7 +1698,7 @@ static bool sem_check_package(tree_t t)
          tree_t decl = tree_decl(t, n);
          ident_t unqual = tree_ident(decl);
 
-         if (sem_check(tree_decl(t, n))) {
+         if (sem_check(decl) && (tree_kind(decl) != T_ATTR_SPEC)) {
             // Make the unqualified name visible inside the package
             scope_insert_alias(decl, unqual);
          }
@@ -2078,6 +2111,12 @@ static bool sem_check_conversion(tree_t t)
    type_t to   = tree_type(tree_ref(t));
 
    tree_set_type(t, to);
+
+   // Resolve both types to their base types
+   while (type_kind(from) == T_SUBTYPE)
+      from = type_base(from);
+   while (type_kind(to) == T_SUBTYPE)
+      to = type_base(to);
 
    type_kind_t from_k = type_kind(from);
    type_kind_t to_k   = type_kind(to);
@@ -2922,6 +2961,7 @@ static bool sem_check_ref(tree_t t)
    case T_CONST_DECL:
    case T_ENUM_LIT:
    case T_ALIAS:
+   case T_TYPE_DECL:
       tree_set_type(t, tree_type(decl));
       break;
 
@@ -3036,7 +3076,7 @@ static bool sem_check_attr_ref(tree_t t)
       type_t ftype = tree_type(a);
       tree_set_type(t, type_result(ftype));
 
-      if ((tree_kind(decl) != T_TYPE_DECL) && (tree_params(t) == 0)) {
+      if (tree_params(t) == 0) {
          // For an expression X'A add X as the final parameter
          tree_t ref = sem_make_ref(decl);
          tree_set_loc(ref, tree_loc(t));
@@ -3355,14 +3395,10 @@ static bool sem_check_for(tree_t t)
       return false;
    tree_set_range(t, r);
 
-   type_t base = tree_type(tree_range(t).left);
-   if (type_kind(base) == T_CARRAY)
-      base = type_elem(base);
-
    tree_t idecl = tree_new(T_VAR_DECL);
    tree_set_ident(idecl, tree_ident2(t));
    tree_set_loc(idecl, tree_loc(t));
-   tree_set_type(idecl, base);
+   tree_set_type(idecl, tree_type(r.left));
 
    tree_add_decl(t, idecl);
 
@@ -3475,6 +3511,65 @@ static bool sem_check_attr_spec(tree_t t)
    return true;
 }
 
+static bool sem_check_if_generate(tree_t t)
+{
+   type_t std_bool = sem_std_type("BOOLEAN");
+   tree_t value = tree_value(t);
+
+   if (!sem_check_constrained(value, std_bool))
+      return false;
+
+   if (!type_eq(tree_type(value), std_bool))
+      sem_error(value, "condition of generate statement must be BOOLEAN");
+
+   scope_push(NULL);
+
+   bool ok = true;
+
+   for (unsigned i = 0; i < tree_decls(t); i++)
+      ok = sem_check(tree_decl(t, i)) && ok;
+
+   if (ok) {
+      for (unsigned i = 0; i < tree_stmts(t); i++)
+         ok = sem_check(tree_stmt(t, i)) && ok;
+   }
+
+   scope_pop();
+   return ok;
+}
+
+static bool sem_check_for_generate(tree_t t)
+{
+
+   range_t r = tree_range(t);
+   if (!sem_check_range(&r))
+      return false;
+   tree_set_range(t, r);
+
+   tree_t idecl = tree_new(T_VAR_DECL);
+   tree_set_ident(idecl, tree_ident2(t));
+   tree_set_loc(idecl, tree_loc(t));
+   tree_set_type(idecl, tree_type(r.left));
+
+   tree_set_ref(t, idecl);
+
+   scope_push(NULL);
+   scope_insert(idecl);
+
+   bool ok = true;
+
+   for (unsigned i = 0; i < tree_decls(t); i++)
+      ok = sem_check(tree_decl(t, i)) && ok;
+
+   if (ok) {
+      for (unsigned i = 0; i < tree_stmts(t); i++)
+         ok = sem_check(tree_stmt(t, i)) && ok;
+   }
+
+   scope_pop();
+   return ok;
+}
+
 static void sem_intern_strings(void)
 {
    // Intern some commonly used strings
@@ -3576,6 +3671,10 @@ bool sem_check(tree_t t)
       return sem_check_attr_decl(t);
    case T_COMPONENT:
       return sem_check_component(t);
+   case T_IF_GENERATE:
+      return sem_check_if_generate(t);
+   case T_FOR_GENERATE:
+      return sem_check_for_generate(t);
    default:
       sem_error(t, "cannot check tree kind %d", tree_kind(t));
    }

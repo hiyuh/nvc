@@ -40,6 +40,7 @@ static LLVMValueRef   mod_name = NULL;
 static ident_t var_offset_i = NULL;
 static ident_t local_var_i = NULL;
 static ident_t sig_struct_i = NULL;
+static ident_t foreign_i = NULL;
 
 // Linked list of entry points to a process
 // These correspond to wait statements
@@ -236,10 +237,29 @@ static const char *cgen_mangle_func_name(tree_t decl)
    char *p = buf;
    type_t type = tree_type(decl);
 
-   p += snprintf(p, end - p, "%s", istr(tree_ident(decl)));
-   for (unsigned i = 0; i < type_params(type); i++) {
-      type_t param = type_param(type, i);
-      p += snprintf(p, end - p, "$%s", istr(type_ident(param)));
+   tree_t foreign = tree_attr_tree(decl, foreign_i);
+   if (foreign != NULL) {
+      assert(tree_kind(foreign) == T_AGGREGATE);
+
+      for (unsigned i = 0; i < tree_assocs(foreign); i++) {
+         assoc_t a = tree_assoc(foreign, i);
+         assert(a.kind == A_POS);
+         assert(tree_kind(a.value) == T_REF);
+
+         tree_t ch = tree_ref(a.value);
+         assert(tree_kind(ch) == T_ENUM_LIT);
+
+         *p++ = tree_pos(ch);
+      }
+
+      *p = '\0';
+   }
+   else {
+      p += snprintf(p, end - p, "%s", istr(tree_ident(decl)));
+      for (unsigned i = 0; i < type_params(type); i++) {
+         type_t param = type_param(type, i);
+         p += snprintf(p, end - p, "$%s", istr(type_ident(param)));
+      }
    }
 
    return buf;
@@ -486,7 +506,9 @@ static LLVMValueRef cgen_get_slice(LLVMValueRef array, type_t type,
 
    LLVMValueRef ptr = LLVMBuildGEP(builder, data, &off, 1, "");
 
-   if (cgen_const_bounds(type))
+   bool unwrap = cgen_is_const(r.left) && cgen_is_const(r.right);
+
+   if (unwrap)
       return ptr;
    else
       return cgen_array_meta(type,
@@ -577,6 +599,9 @@ static void cgen_prototype(tree_t t, LLVMTypeRef *args, bool procedure)
                args[i] = llvm_type(type);
          }
          break;
+
+      case C_FILE:
+         assert(false);
       }
    }
 }
@@ -804,19 +829,15 @@ static void cgen_call_args(tree_t t, LLVMValueRef *args, struct cgen_ctx *ctx)
 
          // If we are passing an unconstrained array actual to a
          // constrained formal then we need to unwrap the array
-         bool need_unwrap =
-            (type_kind(formal_type) == T_CARRAY)
-            && !(cgen_const_bounds(type))
-            && (builtin == NULL);
+         if ((type_kind(formal_type) == T_CARRAY) && (builtin == NULL)) {
+            LLVMValueRef ptr = args[i];
+            if (!cgen_const_bounds(type)) {
+               // XXX: insert bounds checking here
+               ptr = LLVMBuildExtractValue(builder, args[i], 0, "aptr");
+            }
 
-         if (need_unwrap) {
-            // XXX: insert bounds checking here
-
-            args[i] = LLVMBuildPointerCast(
-               builder,
-               LLVMBuildExtractValue(builder, args[i], 0, "aptr"),
-               LLVMPointerType(llvm_type(formal_type), 0),
-               "unwrapped");
+            LLVMTypeRef lt = LLVMPointerType(llvm_type(formal_type), 0);
+            args[i] = LLVMBuildPointerCast(builder, ptr, lt, "");
          }
       }
    }
@@ -2676,6 +2697,9 @@ static void cgen_func_body(tree_t t)
       case C_CONSTANT:
          tree_add_attr_ptr(p, local_var_i, LLVMGetParam(fn, i));
          break;
+
+      case C_FILE:
+         assert(false);
       }
    }
 
@@ -2731,6 +2755,9 @@ static void cgen_proc_body(tree_t t)
       case C_CONSTANT:
          tree_add_attr_ptr(p, local_var_i, LLVMGetParam(fn, i));
          break;
+
+      case C_FILE:
+         assert(false);
       }
    }
 
@@ -2948,6 +2975,7 @@ void cgen(tree_t top)
    var_offset_i = ident_new("var_offset");
    local_var_i  = ident_new("local_var");
    sig_struct_i = ident_new("sig_struct");
+   foreign_i    = ident_new("FOREIGN");
 
    tree_kind_t kind = tree_kind(top);
    if (kind != T_ELAB && kind != T_PACK_BODY)

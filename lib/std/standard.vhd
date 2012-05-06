@@ -79,6 +79,8 @@ package STANDARD is
     type FILE_OPEN_STATUS is (OPEN_OK, STATUS_ERROR, NAME_ERROR,
                               MODE_ERROR);
 
-    --attribute FOREIGN : STRING;
+    attribute FOREIGN : STRING;
+
+    attribute FOREIGN of NOW : function is "_std_standard_now";
     
 end package;

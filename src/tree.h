@@ -37,7 +37,8 @@ typedef enum class {
    C_DEFAULT,
    C_SIGNAL,
    C_VARIABLE,
-   C_CONSTANT
+   C_CONSTANT,
+   C_FILE
 } class_t;
 
 typedef enum tree_kind {
@@ -89,6 +90,9 @@ typedef enum tree_kind {
    T_TYPE_CONV,
    T_SELECT,
    T_COMPONENT,
+   T_IF_GENERATE,
+   T_FOR_GENERATE,
+   T_FILE_DECL,
 
    T_LAST_TREE_KIND
 } tree_kind_t;
@@ -139,7 +143,8 @@ const loc_t *tree_loc(tree_t t);
 void tree_set_loc(tree_t t, const loc_t *loc);
 
 // T_PORT_DECL, T_SIGNAL_DECL, T_VAR_DECL, T_REF, T_TYPE_DECL,
-// T_CONST_DECL, T_FUNC_DECL, T_ALIAS, T_ATTR_DECL, T_TYPE_CONV
+// T_CONST_DECL, T_FUNC_DECL, T_ALIAS, T_ATTR_DECL, T_TYPE_CONV,
+// T_FILE_DECL
 type_t tree_type(tree_t t);
 void tree_set_type(tree_t t, type_t ty);
 bool tree_has_type(tree_t t);
@@ -147,12 +152,14 @@ bool tree_has_type(tree_t t);
 // T_ENTITY, T_PORT_DECL, T_FCALL, T_ARCH, T_SIGNAL_DECL, T_PROCESS,
 // T_VAR_DECL, T_REF, T_TYPE_DECL, T_PACKAGE, T_QUALIFIED, T_ENUM_LIT,
 // T_CONST_DECL, T_FUNC_DECL, T_ATTR_REF, T_INSTANCE, T_WHILE,
-// T_ATTR_DECL, T_PCALL, T_TYPE_CONV, T_COMPONENT
+// T_ATTR_DECL, T_PCALL, T_TYPE_CONV, T_COMPONENT, T_IF_GENERATE,
+// T_FOR_GENERATE, T_FILE_DECL
 ident_t tree_ident(tree_t t);
 void tree_set_ident(tree_t t, ident_t i);
 bool tree_has_ident(tree_t t);
 
-// T_ARCH, T_ATTR_REF, T_INSTANCE, T_FOR, T_ATTR_SPEC, T_PCALL
+// T_ARCH, T_ATTR_REF, T_INSTANCE, T_FOR, T_ATTR_SPEC, T_PCALL,
+// T_IF_GENERATE, T_FOR_GENERATE
 ident_t tree_ident2(tree_t t);
 void tree_set_ident2(tree_t t, ident_t i);
 
@@ -164,6 +171,10 @@ void tree_add_port(tree_t t, tree_t d);
 // T_PORT_DECL
 port_mode_t tree_port_mode(tree_t t);
 void tree_set_port_mode(tree_t t, port_mode_t mode);
+
+// T_FILE_DECL
+tree_t tree_file_mode(tree_t t);
+void tree_set_file_mode(tree_t t, tree_t m);
 
 // T_ENTITY, T_COMPONENT
 unsigned tree_generics(tree_t t);
@@ -187,7 +198,7 @@ void tree_set_literal(tree_t t, literal_t lit);
 // T_PORT_DECL, T_SIGNAL_DECL, T_VAR_DECL, T_VAR_ASSIGN,
 // T_QUALIFIED, T_CONST_DECL, T_ASSERT, T_ATTR_SPEC
 // T_ARRAY_REF, T_IF, T_WHILE, T_REF, T_ALIAS, T_WAVEFORM
-// T_COND, T_SELECT
+// T_COND, T_SELECT, T_IF_GENERATE, T_FILE_DECL
 bool tree_has_value(tree_t t);
 tree_t tree_value(tree_t t);
 void tree_set_value(tree_t t, tree_t v);
@@ -197,13 +208,14 @@ unsigned tree_waveforms(tree_t t);
 tree_t tree_waveform(tree_t t, unsigned n);
 void tree_add_waveform(tree_t t, tree_t w);
 
-// T_ARCH, T_PROCESS, T_PACKAGE, T_FUNC_BODY, T_PROC_BODY, T_BLOCK
+// T_ARCH, T_PROCESS, T_PACKAGE, T_FUNC_BODY, T_PROC_BODY, T_BLOCK,
+// T_IF_GENERATE, T_FOR_GENERATE
 unsigned tree_decls(tree_t t);
 tree_t tree_decl(tree_t t, unsigned n);
 void tree_add_decl(tree_t t, tree_t d);
 
 // T_ARCH, T_PROCESS, T_IF, T_WHILE, T_FOR, T_FUNC_BODY, T_BLOCK
-// T_PROC_BODY
+// T_PROC_BODY, T_IF_GENERATE, T_FOR_GENERATE
 unsigned tree_stmts(tree_t t);
 tree_t tree_stmt(tree_t t, unsigned n);
 void tree_add_stmt(tree_t t, tree_t d);

@@ -338,6 +338,7 @@ START_TEST(test_const)
 
    const error_t expect[] = {
       { 12, "invalid target of variable assignment" },
+      { 16, "constant declaration must have an initial value" },
       { -1, NULL }
    };
    expect_errors(expect);
@@ -764,9 +765,9 @@ START_TEST(test_conv)
    fail_unless(input_from_file(TESTDIR "/sem/conv.vhd"));
 
    const error_t expect[] = {
-      { 24, "conversion only allowed between closely related types" },
-      { 25, "type of value B does not match type of target A" },
-      { 27, "conversion only allowed between closely related types" },
+      { 26, "conversion only allowed between closely related types" },
+      { 27, "type of value B does not match type of target A" },
+      { 29, "conversion only allowed between closely related types" },
       { -1, NULL }
    };
    expect_errors(expect);
@@ -825,6 +826,36 @@ START_TEST(test_attr)
 }
 END_TEST
 
+START_TEST(test_generate)
+{
+   tree_t a, e;
+
+   fail_unless(input_from_file(TESTDIR "/sem/generate.vhd"));
+
+   const error_t expect[] = {
+      { 15, "condition of generate statement must be BOOLEAN" },
+      { 26, "undefined identifier Y" },
+      { -1, NULL }
+   };
+   expect_errors(expect);
+
+   e = parse();
+   fail_if(e == NULL);
+   fail_unless(tree_kind(e) == T_ENTITY);
+   sem_check(e);
+
+   a = parse();
+   fail_if(a == NULL);
+   fail_unless(tree_kind(a) == T_ARCH);
+   fail_if(sem_check(a));
+
+   fail_unless(parse() == NULL);
+   fail_unless(parse_errors() == 0);
+
+   fail_unless(sem_errors() == (sizeof(expect) / sizeof(error_t)) - 1);
+}
+END_TEST
+
 int main(void)
 {
    register_trace_signal_handlers();
@@ -852,6 +883,7 @@ int main(void)
    tcase_add_test(tc_core, test_concat);
    tcase_add_test(tc_core, test_conv);
    tcase_add_test(tc_core, test_attr);
+   tcase_add_test(tc_core, test_generate);
    suite_add_tcase(s, tc_core);
 
    SRunner *sr = srunner_create(s);
