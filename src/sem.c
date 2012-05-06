@@ -72,11 +72,13 @@ static struct type_set *top_type_set = NULL;
 static ident_t         builtin_i;
 static ident_t         std_standard_i;
 
+#if !defined SPLINT
 #define sem_error(t, ...) do {                        \
       error_at(t ? tree_loc(t) : NULL , __VA_ARGS__); \
       errors++;                                       \
       return false;                                   \
    } while (0)
+#endif
 
 static void scope_push(ident_t prefix)
 {
@@ -111,12 +113,13 @@ static void scope_ident_list_free(struct ident_list *list)
 
 static void scope_pop(void)
 {
+   struct scope *s;
    assert(top_scope != NULL);
 
    scope_ident_list_free(top_scope->imported);
    scope_btree_free(top_scope->decls);
 
-   struct scope *s = top_scope;
+   s = top_scope;
    top_scope = s->down;
    free(s);
 }
@@ -284,6 +287,8 @@ static void scope_replace(tree_t t, tree_t with)
 
 static bool sem_check_stale(lib_t lib, tree_t t)
 {
+   struct stat st;
+
    // Check if the source file corresponding to t has been modified
    // more recently than the library unit
 
@@ -291,7 +296,6 @@ static bool sem_check_stale(lib_t lib, tree_t t)
    if (l->file == NULL)
       return true;
 
-   struct stat st;
    if (stat(l->file, &st) < 0) {
       if (errno != ENOENT)
          fatal_errno("%s", l->file);
@@ -308,16 +312,23 @@ static bool sem_check_stale(lib_t lib, tree_t t)
 
 static bool scope_import_unit(context_t ctx, lib_t lib, bool all)
 {
+   struct scope *s;
+   struct ident_list *it;
+   tree_t unit;
+   unsigned n;
+   const char *tmp;
+   const char *pqual;
+   const char *unqual;
+
    // Check we haven't already imported this
-   for (struct scope *s = top_scope; s != NULL; s = s->down) {
-      struct ident_list *it;
+   for (s = top_scope; s != NULL; s = s->down) {
       for (it = s->imported; it != NULL; it = it->next) {
          if (it->ident == ctx.name)
             return true;
       }
    }
 
-   tree_t unit = lib_get(lib, ctx.name);
+   unit = lib_get(lib, ctx.name);
    if (unit == NULL) {
       error_at(&ctx.loc, "unit %s not found in library %s",
                istr(ctx.name), istr(lib_name(lib)));
@@ -328,7 +339,7 @@ static bool scope_import_unit(context_t ctx, lib_t lib, bool all)
    if (!sem_check_stale(lib, unit))
       return false;
 
-   for (unsigned n = 0; n < tree_decls(unit); n++) {
+   for (n = 0; n < tree_decls(unit); n++) {
       tree_t decl = tree_decl(unit, n);
       if (tree_kind(decl) == T_ATTR_SPEC)
          continue;
@@ -337,12 +348,12 @@ static bool scope_import_unit(context_t ctx, lib_t lib, bool all)
          return false;
 
       // Make unqualified and package qualified names visible
-      const char *tmp = istr(tree_ident(decl));
-      const char *pqual = strchr(tmp, '.');
+      tmp = istr(tree_ident(decl));
+      pqual = strchr(tmp, '.');
       if (pqual != NULL)
          scope_insert_alias(decl, ident_new(pqual + 1));
       if (all) {
-         const char *unqual = strrchr(tmp, '.');
+         unqual = strrchr(tmp, '.');
          if (unqual != NULL)
             scope_insert_alias(decl, ident_new(unqual + 1));
       }
@@ -370,21 +381,24 @@ static void type_set_push_universal(void)
 
 static void type_set_pop(void)
 {
+   struct type_set *old;
    assert(top_type_set != NULL);
 
-   struct type_set *old = top_type_set;
+   old = top_type_set;
    top_type_set = old->down;
    free(old);
 }
 
 static void type_set_add(type_t t)
 {
+   unsigned i;
+
    assert(top_type_set != NULL);
    assert(top_type_set->n_members < MAX_TS_MEMBERS);
    assert(t != NULL);
    assert(type_kind(t) != T_UNRESOLVED);
 
-   for (unsigned i = 0; i < top_type_set->n_members; i++) {
+   for (i = 0; i < top_type_set->n_members; i++) {
       if (top_type_set->members[i] == t)
          return;
    }
@@ -405,13 +419,17 @@ static void type_set_force(type_t t)
 
 static bool type_set_uniq_composite(type_t *pt)
 {
+   int i;
+   type_t type;
+   bool comp;
+
    assert(top_type_set != NULL);
 
    *pt = NULL;
-   for (int i = 0; i < top_type_set->n_members; i++) {
-      type_t type = top_type_set->members[i];
+   for (i = 0; i < top_type_set->n_members; i++) {
+      type = top_type_set->members[i];
 
-      bool comp = type_is_array(type);
+      comp = type_is_array(type);
       if (comp) {
          if (*pt != NULL)
             return false;
@@ -437,10 +455,12 @@ static void type_set_dump(void)
 
 static bool type_set_member(type_t t)
 {
+   unsigned n;
+
    if (top_type_set == NULL || top_type_set->n_members == 0)
       return true;
 
-   for (unsigned n = 0; n < top_type_set->n_members; n++) {
+   for (n = 0; n < top_type_set->n_members; n++) {
       if (type_eq(top_type_set->members[n], t))
          return true;
    }
@@ -461,11 +481,13 @@ static type_t sem_std_type(const char *name)
 
 static tree_t sem_make_int(int i)
 {
+   tree_t t;
    literal_t l;
+
    l.kind = L_INT;
    l.i    = i;
 
-   tree_t t = tree_new(T_LITERAL);
+   t = tree_new(T_LITERAL);
    tree_set_literal(t, l);
    tree_set_type(t, sem_std_type("INTEGER"));
 
@@ -484,18 +506,21 @@ static tree_t sem_make_ref(tree_t to)
 static tree_t sem_builtin_fn(ident_t name, type_t result,
                              const char *builtin, ...)
 {
-   type_t f = type_new(T_FUNC);
+   type_t f;
+   va_list ap;
+   type_t arg;
+   tree_t d;
+
+   f = type_new(T_FUNC);
    type_set_ident(f, name);
    type_set_result(f, result);
 
-   va_list ap;
    va_start(ap, builtin);
-   type_t arg;
    while ((arg = va_arg(ap, type_t)))
       type_add_param(f, arg);
    va_end(ap);
 
-   tree_t d = tree_new(T_FUNC_DECL);
+   d = tree_new(T_FUNC_DECL);
    tree_set_ident(d, name);
    tree_set_type(d, f);
    tree_add_attr_str(d, builtin_i, ident_new(builtin));
@@ -529,10 +554,12 @@ static tree_t sem_bool_lit(type_t std_bool, bool v)
 static tree_t sem_int_lit(type_t type, int64_t i)
 {
    literal_t l;
+   tree_t f;
+
    l.kind = L_INT;
    l.i = i;
 
-   tree_t f = tree_new(T_LITERAL);
+   f = tree_new(T_LITERAL);
    tree_set_literal(f, l);
    tree_set_type(f, type);
 
@@ -541,19 +568,29 @@ static tree_t sem_int_lit(type_t type, int64_t i)
 
 static void sem_declare_predefined_ops(tree_t decl)
 {
+   type_t t;
+   ident_t mult, div, plus, minus;
+   type_t std_bool, std_int;
+   ident_t boolean_i, bit_i;
+   bool logical, vec_logical;
+   type_t base;
+   range_t r;
+   tree_t image, left, right;
+   tree_t succ, pred, leftof, rightof;
+
    // Prefined operators are defined in LRM 93 section 7.2
 
-   type_t t = tree_type(decl);
+   t = tree_type(decl);
 
-   ident_t mult  = ident_new("\"*\"");
-   ident_t div   = ident_new("\"/\"");
-   ident_t plus  = ident_new("\"+\"");
-   ident_t minus = ident_new("\"-\"");
+   mult  = ident_new("\"*\"");
+   div   = ident_new("\"/\"");
+   plus  = ident_new("\"+\"");
+   minus = ident_new("\"-\"");
 
    // Predefined operators
 
-   type_t std_bool = sem_std_type("BOOLEAN");
-   type_t std_int  = sem_std_type("INTEGER");
+   std_bool = sem_std_type("BOOLEAN");
+   std_int  = sem_std_type("INTEGER");
 
    type_kind_t kind = type_kind(t);
 
@@ -638,10 +675,10 @@ static void sem_declare_predefined_ops(tree_t decl)
 
    // Logical operators
 
-   ident_t boolean_i = ident_new("STD.STANDARD.BOOLEAN");
-   ident_t bit_i = ident_new("STD.STANDARD.BIT");
+   boolean_i = ident_new("STD.STANDARD.BOOLEAN");
+   bit_i = ident_new("STD.STANDARD.BIT");
 
-   bool logical = (type_ident(t) == boolean_i || type_ident(t) == bit_i);
+   logical = (type_ident(t) == boolean_i || type_ident(t) == bit_i);
 
    if (logical) {
       sem_declare_binary(ident_new("\"and\""), t, t, t, "and");
@@ -653,9 +690,9 @@ static void sem_declare_predefined_ops(tree_t decl)
       sem_declare_unary(ident_new("\"not\""), t, t, "not");
    }
 
-   bool vec_logical = false;
+   vec_logical = false;
    if (kind == T_CARRAY || kind == T_UARRAY) {
-      type_t base = type_elem(t);
+      base = type_elem(t);
       vec_logical = (type_ident(base) == boolean_i
                      || type_ident(base) == bit_i);
    }
@@ -678,7 +715,7 @@ static void sem_declare_predefined_ops(tree_t decl)
    case T_PHYSICAL:
    case T_SUBTYPE:
       {
-         range_t r = type_dim(t, 0);
+         r = type_dim(t, 0);
 
          tree_add_attr_tree(decl, ident_new("LEFT"), r.left);
          tree_add_attr_tree(decl, ident_new("RIGHT"), r.right);
@@ -694,7 +731,7 @@ static void sem_declare_predefined_ops(tree_t decl)
             tree_add_attr_tree(decl, ident_new("LOW"), r.right);
          }
 
-         tree_t image = sem_builtin_fn(ident_new("NVC.BUILTIN.IMAGE"),
+         image = sem_builtin_fn(ident_new("NVC.BUILTIN.IMAGE"),
                                        sem_std_type("STRING"),
                                        "image", t, NULL);
          tree_add_attr_tree(decl, ident_new("IMAGE"), image);
@@ -703,14 +740,14 @@ static void sem_declare_predefined_ops(tree_t decl)
 
    case T_ENUM:
       {
-         tree_t left  = type_enum_literal(t, 0);
-         tree_t right = type_enum_literal(t, type_enum_literals(t) - 1);
+         left  = type_enum_literal(t, 0);
+         right = type_enum_literal(t, type_enum_literals(t) - 1);
          tree_add_attr_tree(decl, ident_new("LEFT"), sem_make_ref(left));
          tree_add_attr_tree(decl, ident_new("RIGHT"), sem_make_ref(right));
          tree_add_attr_tree(decl, ident_new("LOW"), sem_make_ref(left));
          tree_add_attr_tree(decl, ident_new("HIGH"), sem_make_ref(right));
 
-         tree_t image = sem_builtin_fn(ident_new("NVC.BUILTIN.IMAGE"),
+         image = sem_builtin_fn(ident_new("NVC.BUILTIN.IMAGE"),
                                        sem_std_type("STRING"),
                                        "image", t, NULL);
          tree_add_attr_tree(decl, ident_new("IMAGE"), image);
@@ -738,20 +775,16 @@ static void sem_declare_predefined_ops(tree_t decl)
    case T_SUBTYPE:
    case T_ENUM:
       {
-         tree_t succ = sem_builtin_fn(ident_new("NVC.BUILTIN.SUCC"),
-                                      t, "succ", t, NULL);
+         succ = sem_builtin_fn(ident_new("NVC.BUILTIN.SUCC"), t, "succ", t, NULL);
          tree_add_attr_tree(decl, ident_new("SUCC"), succ);
 
-         tree_t pred = sem_builtin_fn(ident_new("NVC.BUILTIN.PRED"),
-                                      t, "pred", t, NULL);
+         pred = sem_builtin_fn(ident_new("NVC.BUILTIN.PRED"), t, "pred", t, NULL);
          tree_add_attr_tree(decl, ident_new("PRED"), pred);
 
-         tree_t leftof = sem_builtin_fn(ident_new("NVC.BUILTIN.LEFTOF"),
-                                        t, "leftof", t, NULL);
+         leftof = sem_builtin_fn(ident_new("NVC.BUILTIN.LEFTOF"), t, "leftof", t, NULL);
          tree_add_attr_tree(decl, ident_new("LEFTOF"), leftof);
 
-         tree_t rightof = sem_builtin_fn(ident_new("NVC.BUILTIN.RIGHTOF"),
-                                         t, "rightof", t, NULL);
+         rightof = sem_builtin_fn(ident_new("NVC.BUILTIN.RIGHTOF"), t, "rightof", t, NULL);
          tree_add_attr_tree(decl, ident_new("RIGHTOF"), rightof);
       }
       break;
@@ -763,6 +796,8 @@ static void sem_declare_predefined_ops(tree_t decl)
 
 static bool sem_check_subtype(tree_t t, type_t type, type_t *pbase)
 {
+   unsigned i;
+
    // Resolve a subtype to its base type
 
    while (type_kind(type) == T_SUBTYPE) {
@@ -797,7 +832,7 @@ static bool sem_check_subtype(tree_t t, type_t type, type_t *pbase)
          case T_CARRAY:
          case T_SUBTYPE:
          case T_INTEGER:
-            for (unsigned i = 0; i < type_dims(base); i++)
+            for (i = 0; i < type_dims(base); i++)
                type_add_dim(type, type_dim(base, i));
             break;
 
@@ -817,6 +852,13 @@ static bool sem_check_subtype(tree_t t, type_t type, type_t *pbase)
 
 static bool sem_declare(tree_t decl)
 {
+   tree_t forward;
+   type_t ni;
+   bool ok;
+   type_t type;
+   unsigned i;
+   tree_t c;
+
    // Handle special cases of scope insertion such as enumeration
    // literals, physical unit names, and predefined types
 
@@ -826,7 +868,7 @@ static bool sem_declare(tree_t decl)
 
    // If this is full type declarataion then replace any previous
    // incomplete type declaration
-   tree_t forward = scope_find(tree_ident(decl));
+   forward = scope_find(tree_ident(decl));
    if (forward != NULL && tree_kind(forward) == T_TYPE_DECL) {
       type_t incomplete = tree_type(forward);
       if (type_kind(incomplete) == T_INCOMPLETE) {
@@ -837,7 +879,7 @@ static bool sem_declare(tree_t decl)
          // Create a new incomplete type and attach that to the
          // forward declaration: this is useful when we serialise
          // the tree to avoid circular references
-         type_t ni = type_new(T_INCOMPLETE);
+         ni = type_new(T_INCOMPLETE);
          type_set_ident(ni, type_ident(incomplete));
          tree_set_type(forward, ni);
 
@@ -855,25 +897,24 @@ static bool sem_declare(tree_t decl)
    if (tree_kind(decl) == T_TYPE_DECL)
       sem_declare_predefined_ops(decl);
 
-   bool ok = true;
-
-   type_t type = tree_type(decl);
+   ok = true;
+   type = tree_type(decl);
    switch (type_kind(type)) {
    case T_ENUM:
       // Need to add each literal to the scope
-      for (unsigned i = 0; i < type_enum_literals(type); i++)
+      for (i = 0; i < type_enum_literals(type); i++)
          ok = ok && scope_insert(type_enum_literal(type, i));
       break;
 
    case T_PHYSICAL:
       // Create constant declarations for each unit
-      for (unsigned i = 0; i < type_units(type); i++) {
+      for (i = 0; i < type_units(type); i++) {
          unit_t u = type_unit(type, i);
          ok = ok && sem_check_constrained(u.multiplier, type);
 
          tree_set_type(u.multiplier, type);
 
-         tree_t c = tree_new(T_CONST_DECL);
+         c = tree_new(T_CONST_DECL);
          tree_set_loc(c, tree_loc(u.multiplier));
          tree_set_ident(c, u.name);
          tree_set_type(c, type);
@@ -892,18 +933,23 @@ static bool sem_declare(tree_t decl)
 
 static bool sem_check_range(range_t *r)
 {
+   tree_t decl;
+   type_t type;
+   type_kind_t kind;
+   tree_t a, b;
+
    if (r->kind == RANGE_EXPR) {
       assert(r->right == NULL);
       assert(tree_kind(r->left) == T_ATTR_REF
              || tree_kind(r->left) == T_REF);
 
-      tree_t decl = scope_find(tree_ident(r->left));
+      decl = scope_find(tree_ident(r->left));
       if (decl == NULL)
          sem_error(r->left, "undefined identifier %s",
                    istr(tree_ident(r->left)));
 
-      type_t type = tree_type(decl);
-      type_kind_t kind = type_kind(type);
+      type = tree_type(decl);
+      kind = type_kind(type);
       switch (kind) {
       case T_CARRAY:
          *r = type_dim(type, 0);
@@ -911,11 +957,11 @@ static bool sem_check_range(range_t *r)
       case T_ENUM:
       case T_UARRAY:
          {
-            tree_t a = tree_new(T_ATTR_REF);
+            a = tree_new(T_ATTR_REF);
             tree_set_ident(a, tree_ident(r->left));
             tree_set_ident2(a, ident_new("LEFT"));
 
-            tree_t b = tree_new(T_ATTR_REF);
+            b = tree_new(T_ATTR_REF);
             tree_set_ident(b, tree_ident(r->left));
             tree_set_ident2(b, ident_new("RIGHT"));
 
@@ -943,6 +989,12 @@ static bool sem_check_range(range_t *r)
 
 static bool sem_check_context(tree_t t)
 {
+   context_t c;
+   bool ok;
+   unsigned n;
+   ident_t all;
+   lib_t lib;
+
    // The std.standard package is also implicit unless we are
    // bootstrapping
    if (!opt_get_int("bootstrap")) {
@@ -950,22 +1002,20 @@ static bool sem_check_context(tree_t t)
       if (std == NULL)
          fatal("failed to find std library");
 
-      context_t c = {
-         .name = std_standard_i,
-         .loc  = LOC_INVALID
-      };
+      c.name = std_standard_i;
+      c.loc  = LOC_INVALID;
       if (!scope_import_unit(c, std, true))
          return false;
    }
 
-   bool ok = true;
-   for (unsigned n = 0; n < tree_contexts(t); n++) {
-      context_t c = tree_context(t, n);
-      ident_t all = ident_strip(c.name, ident_new(".all"));
+   ok = true;
+   for (n = 0; n < tree_contexts(t); n++) {
+      c = tree_context(t, n);
+      all = ident_strip(c.name, ident_new(".all"));
       if (all)
          c.name = all;
 
-      lib_t lib = lib_find(istr(ident_until(c.name, '.')), true, true);
+      lib = lib_find(istr(ident_until(c.name, '.')), true, true);
       if (lib != NULL)
          ok = scope_import_unit(c, lib, all != NULL) && ok;
       else
@@ -977,9 +1027,11 @@ static bool sem_check_context(tree_t t)
 
 static bool sem_check_constrained(tree_t t, type_t type)
 {
+   bool ok;
+
    type_set_push();
    type_set_add(type);
-   bool ok = sem_check(t);
+   ok = sem_check(t);
    type_set_pop();
    return ok;
 }
@@ -1004,7 +1056,11 @@ static bool sem_readable(tree_t t)
 
 static bool sem_check_array_dims(type_t type, type_t constraint)
 {
-   for (unsigned i = 0; i < type_dims(type); i++) {
+   unsigned i;
+   bool ok;
+   tree_t error;
+
+   for (i = 0; i < type_dims(type); i++) {
       range_t r = type_dim(type, i);
 
       type_t index_type =
@@ -1013,14 +1069,14 @@ static bool sem_check_array_dims(type_t type, type_t constraint)
       type_set_push();
       if (index_type)
          type_set_add(index_type);
-      bool ok = sem_check_range(&r);
+      ok = sem_check_range(&r);
       type_set_pop();
 
       if (!ok)
          return false;
 
       if (index_type) {
-         tree_t error = NULL;
+         error = NULL;
          if (!type_eq(tree_type(r.left), index_type))
             error = r.left;
          else if (!type_eq(tree_type(r.right), index_type))
@@ -1042,6 +1098,10 @@ static bool sem_check_array_dims(type_t type, type_t constraint)
 
 static bool sem_check_type(tree_t t, type_t *ptype)
 {
+   type_t collapse;
+   unsigned i;
+   tree_t type_decl;
+
    // Check a type at the point where it is used not declared
 
    switch (type_kind(*ptype)) {
@@ -1063,11 +1123,11 @@ static bool sem_check_type(tree_t t, type_t *ptype)
                if (!sem_check_array_dims(*ptype, base))
                   return false;
 
-               type_t collapse = type_new(T_CARRAY);
+               collapse = type_new(T_CARRAY);
                type_set_ident(collapse, type_ident(base));
                type_set_elem(collapse, type_elem(base));  // Element type
 
-               for (unsigned i = 0; i < type_dims(*ptype); i++)
+               for (i = 0; i < type_dims(*ptype); i++)
                   type_add_dim(collapse, type_dim(*ptype, i));
 
                *ptype = collapse;
@@ -1083,7 +1143,7 @@ static bool sem_check_type(tree_t t, type_t *ptype)
 
    case T_UNRESOLVED:
       {
-         tree_t type_decl = scope_find(type_ident(*ptype));
+         type_decl = scope_find(type_ident(*ptype));
          if (type_decl == NULL)
             sem_error(t, "type %s is not defined", istr(type_ident(*ptype)));
 
@@ -1098,13 +1158,16 @@ static bool sem_check_type(tree_t t, type_t *ptype)
 
 static bool sem_check_resolution(type_t type)
 {
+   tree_t ref, fdecl;
+   type_t ftype, param;
+
    // Resolution functions are described in LRM 93 section 2.4
 
    assert(type_kind(type) == T_SUBTYPE);
 
-   tree_t ref = type_resolution(type);
+   ref = type_resolution(type);
 
-   tree_t fdecl = scope_find(tree_ident(ref));
+   fdecl = scope_find(tree_ident(ref));
    if (fdecl == NULL)
       sem_error(ref, "undefined resolution function %s",
                 istr(tree_ident(ref)));
@@ -1113,14 +1176,14 @@ static bool sem_check_resolution(type_t type)
       sem_error(ref, "declaration %s is not a function",
                 istr(tree_ident(ref)));
 
-   type_t ftype = tree_type(fdecl);
+   ftype = tree_type(fdecl);
 
    // Must take a single parameter of array of base type
 
    if (type_params(ftype) != 1)
       sem_error(fdecl, "resolution function must have single argument");
 
-   type_t param = type_param(ftype, 0);
+   param = type_param(ftype, 0);
    if (type_kind(param) != T_UARRAY)
       sem_error(fdecl, "parameter of resolution function must be "
                 "an unconstrained array type");
@@ -1141,6 +1204,10 @@ static bool sem_check_resolution(type_t type)
 
 static bool sem_check_type_decl(tree_t t)
 {
+   type_t type, base;
+   unsigned i;
+   bool ok;
+
    // We need to insert the type into the scope before performing
    // further checks as when bootstrapping we need INTEGER defined
    // before we can check any ranges. Adding a type with errors to
@@ -1150,7 +1217,7 @@ static bool sem_check_type_decl(tree_t t)
    if (!sem_declare(t))
       return false;
 
-   type_t type = tree_type(t);
+   type = tree_type(t);
 
    // Nothing more to do for incomplete types
    if (type_kind(type) == T_INCOMPLETE)
@@ -1161,7 +1228,6 @@ static bool sem_check_type_decl(tree_t t)
       type_set_ident(type, ident_prefix(top_scope->prefix,
                                         type_ident(type), '.'));
 
-   type_t base;
    if (!sem_check_subtype(t, type, &base))
       return false;
 
@@ -1185,7 +1251,7 @@ static bool sem_check_type_decl(tree_t t)
       return sem_check_array_dims(base, NULL);
 
    case T_UARRAY:
-      for (unsigned i = 0; i < type_index_constrs(type); i++) {
+      for (i = 0; i < type_index_constrs(type); i++) {
          type_t index_type = type_index_constr(type, i);
          if (!sem_check_type(t, &index_type))
             return false;
@@ -1203,7 +1269,7 @@ static bool sem_check_type_decl(tree_t t)
          // when there is no base type
          type_set_push();
          type_set_add(sem_std_type("INTEGER"));
-         bool ok = sem_check(r.left) && sem_check(r.right);
+         ok = sem_check(r.left) && sem_check(r.right);
          type_set_pop();
 
          if (ok) {
@@ -1218,8 +1284,8 @@ static bool sem_check_type_decl(tree_t t)
 
    case T_SUBTYPE:
       {
-         bool ok = true;
-         for (unsigned i = 0; i < type_dims(type); i++) {
+         ok = true;
+         for (i = 0; i < type_dims(type); i++) {
             range_t r = type_dim(type, i);
 
             type_t index = NULL;
@@ -1352,13 +1418,13 @@ static tree_t sem_default_value(type_t type)
    case T_CARRAY:
       {
          tree_t def = NULL;
-         for (int i = type_dims(type) - 1 ; i >= 0; i--) {
+         int i;
+         assoc_t a;
+         for (i = type_dims(type) - 1 ; i >= 0; i--) {
             tree_t val = (def ? def : sem_default_value(type_elem(base)));
             def = tree_new(T_AGGREGATE);
-            assoc_t a = {
-               .kind = A_OTHERS,
-               .value = val
-            };
+            a.kind = A_OTHERS;
+            a.value = val;
             tree_add_assoc(def, a);
          }
          return def;
@@ -1459,9 +1525,12 @@ static bool sem_check_alias(tree_t t)
 
 static bool sem_check_func_ports(tree_t t)
 {
-   type_t ftype = tree_type(t);
+   unsigned i;
+   type_t ftype, rtype;
 
-   for (unsigned i = 0; i < tree_ports(t); i++) {
+   ftype = tree_type(t);
+
+   for (i = 0; i < tree_ports(t); i++) {
       tree_t p = tree_port(t, i);
       if (tree_port_mode(p) != PORT_IN)
          sem_error(p, "function arguments must have mode IN");
@@ -1475,7 +1544,7 @@ static bool sem_check_func_ports(tree_t t)
       type_add_param(ftype, tree_type(p));
    }
 
-   type_t rtype = type_result(ftype);
+   rtype = type_result(ftype);
    if (!sem_check_type(t, &rtype))
       return false;
 
@@ -1519,6 +1588,9 @@ static bool sem_check_func_decl(tree_t t)
 
 static bool sem_check_func_body(tree_t t)
 {
+   bool ok;
+   unsigned i, nret;
+
    if (!sem_check_func_ports(t))
       return false;
 
@@ -1533,25 +1605,25 @@ static bool sem_check_func_body(tree_t t)
    scope_push(NULL);
    top_scope->subprog = t;
 
-   bool ok = true;
+   ok = true;
 
-   for (unsigned i = 0; i < tree_ports(t); i++) {
+   for (i = 0; i < tree_ports(t); i++) {
       tree_t p = tree_port(t, i);
       sem_add_attributes(p);
       ok = scope_insert(p) && ok;
    }
 
-   for (unsigned i = 0; i < tree_decls(t); i++)
+   for (i = 0; i < tree_decls(t); i++)
       ok = sem_check(tree_decl(t, i)) && ok;
 
    if (ok) {
-      for (unsigned i = 0; i < tree_stmts(t); i++)
+      for (i = 0; i < tree_stmts(t); i++)
          ok = sem_check(tree_stmt(t, i)) && ok;
    }
 
    scope_pop();
 
-   unsigned nret = tree_visit_only(t, NULL, NULL, T_RETURN);
+   nret = tree_visit_only(t, NULL, NULL, T_RETURN);
    if (nret == 0)
       sem_error(t, "function must contain a return statement");
 
@@ -1560,9 +1632,11 @@ static bool sem_check_func_body(tree_t t)
 
 static bool sem_check_proc_ports(tree_t t)
 {
+   unsigned i;
+
    type_t ptype = tree_type(t);
 
-   for (unsigned i = 0; i < tree_ports(t); i++) {
+   for (i = 0; i < tree_ports(t); i++) {
       tree_t p = tree_port(t, i);
 
       if (tree_class(p) == C_DEFAULT) {
@@ -1600,6 +1674,9 @@ static bool sem_check_proc_decl(tree_t t)
 
 static bool sem_check_proc_body(tree_t t)
 {
+   bool ok;
+   unsigned i;
+
    if (!sem_check_proc_ports(t))
       return false;
 
@@ -1614,19 +1691,19 @@ static bool sem_check_proc_body(tree_t t)
    scope_push(NULL);
    top_scope->subprog = t;
 
-   bool ok = true;
+   ok = true;
 
-   for (unsigned i = 0; i < tree_ports(t); i++) {
+   for (i = 0; i < tree_ports(t); i++) {
       tree_t p = tree_port(t, i);
       sem_add_attributes(p);
       ok = scope_insert(p) && ok;
    }
 
-   for (unsigned i = 0; i < tree_decls(t); i++)
+   for (i = 0; i < tree_decls(t); i++)
       ok = sem_check(tree_decl(t, i)) && ok;
 
    if (ok) {
-      for (unsigned i = 0; i < tree_stmts(t); i++)
+      for (i = 0; i < tree_stmts(t); i++)
          ok = sem_check(tree_stmt(t, i)) && ok;
    }
 
@@ -1636,8 +1713,11 @@ static bool sem_check_proc_body(tree_t t)
 
 static bool sem_check_sensitivity(tree_t t)
 {
-   bool ok = true;
-   for (unsigned i = 0; i < tree_triggers(t); i++) {
+   bool ok;
+   unsigned i;
+
+   ok = true;
+   for (i = 0; i < tree_triggers(t); i++) {
       tree_t r = tree_trigger(t, i);
       ok = sem_check(r) && sem_readable(r) && ok;
 
@@ -1660,15 +1740,18 @@ static bool sem_check_sensitivity(tree_t t)
 
 static bool sem_check_process(tree_t t)
 {
+   bool ok;
+   unsigned n;
+
    scope_push(NULL);
 
-   bool ok = sem_check_sensitivity(t);
+   ok = sem_check_sensitivity(t);
 
-   for (unsigned n = 0; n < tree_decls(t); n++)
+   for (n = 0; n < tree_decls(t); n++)
       ok = sem_check(tree_decl(t, n)) && ok;
 
    if (ok) {
-      for (unsigned n = 0; n < tree_stmts(t); n++)
+      for (n = 0; n < tree_stmts(t); n++)
          ok = sem_check(tree_stmt(t, n)) && ok;
    }
 
@@ -1686,15 +1769,19 @@ static bool sem_check_process(tree_t t)
 
 static bool sem_check_package(tree_t t)
 {
-   ident_t qual = ident_prefix(lib_name(lib_work()), tree_ident(t), '.');
+   bool ok;
+   unsigned n;
+   ident_t qual;
+
+   qual = ident_prefix(lib_name(lib_work()), tree_ident(t), '.');
 
    assert(top_scope == NULL);
    scope_push(NULL);
 
-   bool ok = sem_check_context(t);
+   ok = sem_check_context(t);
    if (ok) {
       scope_push(qual);
-      for (unsigned n = 0; n < tree_decls(t); n++) {
+      for (n = 0; n < tree_decls(t); n++) {
          tree_t decl = tree_decl(t, n);
          ident_t unqual = tree_ident(decl);
 
@@ -1718,20 +1805,24 @@ static bool sem_check_package(tree_t t)
 
 static bool sem_check_package_body(tree_t t)
 {
-   ident_t qual = ident_prefix(lib_name(lib_work()), tree_ident(t), '.');
+   bool ok;
+   ident_t qual;
+   context_t c;
+   unsigned n;
+   bool make_visible;
+
+   qual = ident_prefix(lib_name(lib_work()), tree_ident(t), '.');
 
    assert(top_scope == NULL);
    scope_push(NULL);
 
-   bool ok = sem_check_context(t);
+   ok = sem_check_context(t);
 
    scope_push(qual);
 
    // Look up package declaration
-   context_t c = {
-      .name = qual,
-      .loc  = *tree_loc(t)
-   };
+   c.name = qual;
+   c.loc  = *tree_loc(t);
    ok = ok && scope_import_unit(c, lib_work(), true);
 
    if (ok) {
@@ -1739,7 +1830,7 @@ static bool sem_check_package_body(tree_t t)
       assert(pack != NULL);
       ok = ok && sem_check_context(pack);
 
-      for (unsigned n = 0; n < tree_decls(t); n++) {
+      for (n = 0; n < tree_decls(t); n++) {
          tree_t decl = tree_decl(t, n);
          ident_t unqual = tree_ident(decl);
 
@@ -1748,7 +1839,7 @@ static bool sem_check_package_body(tree_t t)
          // Make the unqualified name visible inside the package except
          // in the case of function bodies where the declaration is
          // already visible
-         bool make_visible =
+         make_visible =
             (tree_kind(decl) != T_FUNC_BODY
              || !sem_check_duplicate(decl, T_FUNC_DECL));
 
@@ -1768,9 +1859,12 @@ static bool sem_check_package_body(tree_t t)
 
 static bool sem_check_generics(tree_t t)
 {
-   bool ok = true;
+   unsigned n;
+   bool ok;
 
-   for (unsigned n = 0; n < tree_generics(t); n++) {
+   ok = true;
+
+   for (n = 0; n < tree_generics(t); n++) {
       tree_t g = tree_generic(t, n);
 
       switch (tree_class(g)) {
@@ -1788,7 +1882,7 @@ static bool sem_check_generics(tree_t t)
 
    if (ok) {
       // Make generics visible in this region
-      for (unsigned n = 0; n < tree_generics(t); n++)
+      for (n = 0; n < tree_generics(t); n++)
          ok = scope_insert(tree_generic(t, n)) && ok;
    }
 
@@ -1797,9 +1891,12 @@ static bool sem_check_generics(tree_t t)
 
 static bool sem_check_ports(tree_t t)
 {
-   bool ok = true;
+   bool ok;
+   unsigned n;
 
-   for (unsigned n = 0; n < tree_ports(t); n++) {
+   ok = true;
+
+   for (n = 0; n < tree_ports(t); n++) {
       tree_t p = tree_port(t, n);
 
       if (tree_class(p) == C_DEFAULT)
@@ -1813,9 +1910,11 @@ static bool sem_check_ports(tree_t t)
 
 static bool sem_check_component(tree_t t)
 {
+   bool ok;
+
    scope_push(NULL);
 
-   bool ok = sem_check_generics(t) && sem_check_ports(t);
+   ok = sem_check_generics(t) && sem_check_ports(t);
 
    scope_pop();
 
@@ -1829,10 +1928,13 @@ static bool sem_check_component(tree_t t)
 
 static bool sem_check_entity(tree_t t)
 {
+   bool ok;
+   ident_t qual;
+
    assert(top_scope == NULL);
    scope_push(NULL);
 
-   bool ok = sem_check_context(t);
+   ok = sem_check_context(t);
 
    scope_push(NULL);
 
@@ -1842,7 +1944,7 @@ static bool sem_check_entity(tree_t t)
    scope_pop();
 
    // Prefix the entity with the current library name
-   ident_t qual = ident_prefix(lib_name(lib_work()), tree_ident(t), '.');
+   qual = ident_prefix(lib_name(lib_work()), tree_ident(t), '.');
    tree_set_ident(t, qual);
    lib_put(lib_work(), t);
 
@@ -1851,10 +1953,15 @@ static bool sem_check_entity(tree_t t)
 
 static bool sem_check_arch(tree_t t)
 {
+   tree_t e;
+   bool ok;
+   unsigned n;
+   ident_t lname, qual, ent_qual;
+
    // Find the corresponding entity
-   tree_t e = lib_get(lib_work(),
-                      ident_prefix(lib_name(lib_work()),
-                                   tree_ident2(t), '.'));
+   e = lib_get(lib_work(),
+               ident_prefix(lib_name(lib_work()),
+                            tree_ident2(t), '.'));
    if (e == NULL)
       sem_error(t, "missing declaration for entity %s",
                 istr(tree_ident2(t)));
@@ -1867,23 +1974,23 @@ static bool sem_check_arch(tree_t t)
 
    // Make all port and generic declarations available in this scope
 
-   bool ok = sem_check_context(e) && sem_check_context(t);
+   ok = sem_check_context(e) && sem_check_context(t);
 
    scope_push(NULL);
 
-   for (unsigned n = 0; n < tree_ports(e); n++)
+   for (n = 0; n < tree_ports(e); n++)
       scope_insert(tree_port(e, n));
 
-   for (unsigned n = 0; n < tree_generics(e); n++)
+   for (n = 0; n < tree_generics(e); n++)
       scope_insert(tree_generic(e, n));
 
    // Now check the architecture itself
 
-   for (unsigned n = 0; n < tree_decls(t); n++)
+   for (n = 0; n < tree_decls(t); n++)
       ok = sem_check(tree_decl(t, n)) && ok;
 
    if (ok) {
-      for (unsigned n = 0; n < tree_stmts(t); n++)
+      for (n = 0; n < tree_stmts(t); n++)
          ok = sem_check(tree_stmt(t, n)) && ok;
    }
 
@@ -1891,11 +1998,11 @@ static bool sem_check_arch(tree_t t)
    scope_pop();
 
    // Prefix the architecture with the current library and entity name
-   ident_t lname = lib_name(lib_work());
-   ident_t qual = ident_prefix(ident_prefix(lname, tree_ident2(t), '.'),
-                               tree_ident(t), '-');
+   lname = lib_name(lib_work());
+   qual = ident_prefix(ident_prefix(lname, tree_ident2(t), '.'),
+                       tree_ident(t), '-');
    tree_set_ident(t, qual);
-   ident_t ent_qual = ident_prefix(lname, tree_ident2(t), '.');
+   ent_qual = ident_prefix(lname, tree_ident2(t), '.');
    tree_set_ident2(t, ent_qual);
 
    lib_put(lib_work(), t);
@@ -1926,10 +2033,13 @@ static tree_t sem_check_lvalue(tree_t t)
 
 static bool sem_check_var_assign(tree_t t)
 {
-   tree_t target = tree_target(t);
-   tree_t value = tree_value(t);
+   tree_t target, value, decl;
+   bool ok, suitable;
 
-   bool ok = sem_check(target);
+   target = tree_target(t);
+   value = tree_value(t);
+
+   ok = sem_check(target);
    if (!ok)
       return false;
 
@@ -1941,11 +2051,11 @@ static bool sem_check_var_assign(tree_t t)
    if (!ok)
       return false;
 
-   tree_t decl = sem_check_lvalue(target);
+   decl = sem_check_lvalue(target);
    if (decl == NULL)
       return false;
 
-   bool suitable = (tree_kind(decl) == T_VAR_DECL)
+   suitable = (tree_kind(decl) == T_VAR_DECL)
       || (tree_kind(decl) == T_PORT_DECL && tree_class(decl) == C_VARIABLE);
 
    if (!suitable)
@@ -1961,9 +2071,12 @@ static bool sem_check_var_assign(tree_t t)
 
 static bool sem_check_waveforms(tree_t t, type_t expect)
 {
-   type_t std_time = sem_std_type("TIME");
+   type_t std_time;
+   unsigned i;
 
-   for (unsigned i = 0; i < tree_waveforms(t); i++) {
+   std_time = sem_std_type("TIME");
+
+   for (i = 0; i < tree_waveforms(t); i++) {
       tree_t waveform = tree_waveform(t, i);
       tree_t value = tree_value(waveform);
 
@@ -2017,10 +2130,12 @@ static bool sem_check_signal_target(tree_t target)
 
 static bool sem_check_reject(tree_t t)
 {
+   type_t std_time;
+
    if (!sem_check(t))
       return false;
 
-   type_t std_time = sem_std_type("TIME");
+   std_time = sem_std_type("TIME");
    if (!type_eq(tree_type(t), std_time))
       sem_error(t, "reject interval must have type TIME");
 
@@ -2048,15 +2163,20 @@ static bool sem_check_signal_assign(tree_t t)
 
 static bool sem_check_cassign(tree_t t)
 {
-   tree_t target = tree_target(t);
+   tree_t target;
+   type_t std_bool;
+   unsigned i;
+   tree_t c;
+
+   target = tree_target(t);
 
    if (!sem_check(target))
       return false;
 
-   type_t std_bool = sem_std_type("BOOLEAN");
+   std_bool = sem_std_type("BOOLEAN");
 
-   for (unsigned i = 0; i < tree_conds(t); i++) {
-      tree_t c = tree_cond(t, i);
+   for (i = 0; i < tree_conds(t); i++) {
+      c = tree_cond(t, i);
 
       if (tree_has_value(c)) {
          tree_t test = tree_value(c);
@@ -2090,6 +2210,13 @@ static unsigned sem_array_dimension(type_t a)
 
 static bool sem_check_conversion(tree_t t)
 {
+   param_t p;
+   bool ok;
+   type_t from, to;
+   type_kind_t from_k, to_k;
+   bool from_array, to_array;
+   bool same_dim, same_elem;
+
    // Type conversions are described in LRM 93 section 7.3.5
 
    if (tree_params(t) != 1)
@@ -2099,16 +2226,16 @@ static bool sem_check_conversion(tree_t t)
    // to the one being converted to
    type_set_push_universal();
 
-   param_t p = tree_param(t, 0);
-   bool ok = sem_check(p.value);
+   p = tree_param(t, 0);
+   ok = sem_check(p.value);
 
    type_set_pop();
 
    if (!ok)
       return false;
 
-   type_t from = tree_type(p.value);
-   type_t to   = tree_type(tree_ref(t));
+   from = tree_type(p.value);
+   to   = tree_type(tree_ref(t));
 
    tree_set_type(t, to);
 
@@ -2118,24 +2245,24 @@ static bool sem_check_conversion(tree_t t)
    while (type_kind(to) == T_SUBTYPE)
       to = type_base(to);
 
-   type_kind_t from_k = type_kind(from);
-   type_kind_t to_k   = type_kind(to);
+   from_k = type_kind(from);
+   to_k   = type_kind(to);
 
    // Conversions are allowed between any abstract numeric types
    if (from_k == T_INTEGER && to_k == T_INTEGER)
       return true;
 
-   bool from_array = (from_k == T_CARRAY || from_k == T_UARRAY);
-   bool to_array   = (to_k == T_CARRAY || to_k == T_UARRAY);
+   from_array = (from_k == T_CARRAY || from_k == T_UARRAY);
+   to_array   = (to_k == T_CARRAY || to_k == T_UARRAY);
 
    if (from_array && to_array) {
       // Types must have same dimensionality
-      bool same_dim = (sem_array_dimension(from) == sem_array_dimension(to));
+      same_dim = (sem_array_dimension(from) == sem_array_dimension(to));
 
       // TODO: index types the same or closely related
 
       // Element types must be the same
-      bool same_elem = type_eq(type_elem(from), type_elem(to));
+      same_elem = type_eq(type_elem(from), type_elem(to));
 
       if (same_dim && same_elem)
          return true;
@@ -2162,39 +2289,46 @@ static bool sem_maybe_ambiguous(tree_t t)
 static bool sem_resolve_overload(tree_t t, tree_t *pick, int *matches,
                                  tree_t *overloads, int n_overloads)
 {
+   bool *ambiguous;
+   unsigned i;
+   int j, n;
+   param_t p;
+   bool ok, match, all_universal, builtin;
+   type_t func_type;
+
    *pick    = NULL;
    *matches = 0;
 
    // Work out which parameters have ambiguous interpretations
-   bool ambiguous[tree_params(t)];
-   for (unsigned i = 0; i < tree_params(t); i++) {
+   ambiguous = (bool *)xmalloc(tree_params(t) * sizeof(bool));
+   for (i = 0; i < tree_params(t); i++) {
       param_t p = tree_param(t, i);
       assert(p.kind == P_POS);
       ambiguous[i] = sem_maybe_ambiguous(p.value);
    }
 
    // First pass: only check those parameters which are unambiguous
-   for (unsigned i = 0; i < tree_params(t); i++) {
+   for (i = 0; i < tree_params(t); i++) {
       if (ambiguous[i])
          continue;
 
       type_set_push();
 
-      for (int j = 0; j < n_overloads; j++) {
+      for (j = 0; j < n_overloads; j++) {
          if (overloads[j] != NULL)
             type_set_add(type_param(tree_type(overloads[j]), i));
       }
 
-      param_t p = tree_param(t, i);
+      p = tree_param(t, i);
       assert(p.kind == P_POS);
-      bool ok = sem_check(p.value);
+      ok = sem_check(p.value);
 
       type_set_pop();
 
       if (ok) {
          // Delete all overloads which don't match this parameter type
          type_t ptype = tree_type(p.value);
-         for (int j = 0; j < n_overloads; j++) {
+         for (j = 0; j < n_overloads; j++) {
             if (overloads[j] != NULL) {
                if (!type_eq(type_param(tree_type(overloads[j]), i),
                             ptype))
@@ -2202,42 +2336,46 @@ static bool sem_resolve_overload(tree_t t, tree_t *pick, int *matches,
             }
          }
       }
-      else
+      else {
+         free(ambiguous);
          return false;
+      }
    }
 
    // Second pass: now the set of overloads has been constrained check
    // those parameters which might be ambiguous
-   for (unsigned i = 0; i < tree_params(t); i++) {
+   for (i = 0; i < tree_params(t); i++) {
       if (!ambiguous[i])
          continue;
 
       type_set_push();
 
-      for (int j = 0; j < n_overloads; j++) {
+      for (j = 0; j < n_overloads; j++) {
          if (overloads[j] != NULL)
             type_set_add(type_param(tree_type(overloads[j]), i));
       }
 
-      param_t p = tree_param(t, i);
+      p = tree_param(t, i);
       assert(p.kind == P_POS);
-      bool ok = sem_check(p.value);
+      ok = sem_check(p.value);
 
       type_set_pop();
 
-      if (!ok)
+      if (!ok) {
+         free(ambiguous);
          return false;
+      }
    }
 
-   for (int n = 0; n < n_overloads; n++) {
+   for (n = 0; n < n_overloads; n++) {
       if (overloads[n] == NULL)
          continue;
 
       // Did argument types match for this overload?
-      bool match = true;
-      bool all_universal = true;
-      type_t func_type = tree_type(overloads[n]);
-      for (unsigned i = 0; i < tree_params(t); i++) {
+      match = true;
+      all_universal = true;
+      func_type = tree_type(overloads[n]);
+      for (i = 0; i < tree_params(t); i++) {
          type_t ptype = tree_type(tree_param(t, i).value);
          match = match && type_eq(type_param(func_type, i), ptype);
          all_universal = all_universal && type_is_universal(ptype);
@@ -2245,7 +2383,7 @@ static bool sem_resolve_overload(tree_t t, tree_t *pick, int *matches,
 
       if (match) {
          (*matches)++;
-         bool builtin = tree_attr_str(overloads[n], builtin_i);
+         builtin = tree_attr_str(overloads[n], builtin_i);
          if (all_universal && builtin) {
             // If all the arguments are universal integer or real and
             // this is a builtin function then it doesn't matter which
@@ -2259,6 +2397,7 @@ static bool sem_resolve_overload(tree_t t, tree_t *pick, int *matches,
                tree_set_type(t, f_result);
             }
             tree_set_ref(t, overloads[n]);
+            free(ambiguous);
             return true;
          }
          else
@@ -2268,16 +2407,22 @@ static bool sem_resolve_overload(tree_t t, tree_t *pick, int *matches,
          overloads[n] = NULL;
    }
 
+   free(ambiguous);
    return true;
 }
 
 static bool sem_check_fcall(tree_t t)
 {
    tree_t overloads[MAX_OVERLOADS];
-   int n_overloads = 0;
-
+   int n_overloads;
    tree_t decl;
-   int n = 0;
+   int n;
+   type_t func_type;
+   bool duplicate;
+   int i, matches;
+
+   n_overloads = 0;
+   n = 0;
    do {
       if ((decl = scope_find_nth(tree_ident(t), n++))) {
          switch (tree_kind(decl)) {
@@ -2299,7 +2444,7 @@ static bool sem_check_fcall(tree_t t)
                continue;   // Look for the next matching name
          }
 
-         type_t func_type = tree_type(decl);
+         func_type = tree_type(decl);
          if (type_set_member(type_result(func_type))) {
             // Number of arguments must match
             if (type_params(func_type) != tree_params(t))
@@ -2307,8 +2452,8 @@ static bool sem_check_fcall(tree_t t)
 
             // Same function may appear multiple times in the symbol
             // table under different names
-            bool duplicate = false;
-            for (int i = 0; i < n_overloads; i++) {
+            duplicate = false;
+            for (i = 0; i < n_overloads; i++) {
                if (overloads[i] == decl)
                   duplicate = true;
             }
@@ -2324,7 +2469,6 @@ static bool sem_check_fcall(tree_t t)
    if (n_overloads == 0)
       sem_error(t, "undefined identifier %s", istr(tree_ident(t)));
 
-   int matches;
    if (!sem_resolve_overload(t, &decl, &matches, overloads, n_overloads))
       return false;
 
@@ -2337,7 +2481,7 @@ static bool sem_check_fcall(tree_t t)
       const char *end = buf + sizeof(buf);
       const bool operator = !isalpha((uint8_t)*istr(tree_ident(t)));
 
-      for (int n = 0; n < n_overloads; n++) {
+      for (n = 0; n < n_overloads; n++) {
          if (overloads[n] != NULL)
             p += snprintf(p, end - p, "\n%s",
                           type_pp(tree_type(overloads[n])));
@@ -2357,7 +2501,7 @@ static bool sem_check_fcall(tree_t t)
       const char *quote = (operator && fname[0] != '"') ? "\"" : "";
 
       p += snprintf(p, end - p, "%s%s%s(", quote, fname, quote);
-      for (unsigned i = 0; i < tree_params(t); i++)
+      for (i = 0; i < tree_params(t); i++)
          p += snprintf(p, end - p, "%s%s",
                        (i == 0 ? "" : ", "),
                        istr(type_ident(tree_type(tree_param(t, i).value))));
@@ -2365,7 +2509,7 @@ static bool sem_check_fcall(tree_t t)
 
       if (top_type_set != NULL && top_type_set->n_members > 0) {
          p += snprintf(p, end - p, " return");
-         for (int i = 0; i < top_type_set->n_members; i++)
+         for (i = 0; i < top_type_set->n_members; i++)
             p += snprintf(p, end - p, "%s %s",
                           (i > 0 ? " |" : ""),
                           type_pp(top_type_set->members[i]));
@@ -2390,10 +2534,14 @@ static bool sem_check_fcall(tree_t t)
 static bool sem_check_pcall(tree_t t)
 {
    tree_t overloads[MAX_OVERLOADS];
-   int n_overloads = 0;
-
+   int n_overloads;
    tree_t decl;
-   int n = 0;
+   int n;
+   int matches;
+   unsigned i;
+
+   n_overloads = 0;
+   n = 0;
    do {
       if ((decl = scope_find_nth(tree_ident2(t), n++))) {
          switch (tree_kind(decl)) {
@@ -2416,7 +2564,6 @@ static bool sem_check_pcall(tree_t t)
    if (n_overloads == 0)
       sem_error(t, "undefined identifier %s", istr(tree_ident2(t)));
 
-   int matches;
    if (!sem_resolve_overload(t, &decl, &matches, overloads, n_overloads))
       return false;
 
@@ -2428,7 +2575,7 @@ static bool sem_check_pcall(tree_t t)
       char *p = buf;
       const char *end = buf + sizeof(buf);
 
-      for (int n = 0; n < n_overloads; n++) {
+      for (n = 0; n < n_overloads; n++) {
          if (overloads[n] != NULL)
             p += snprintf(p, end - p, "\n    %s",
                           type_pp(tree_type(overloads[n])));
@@ -2445,7 +2592,7 @@ static bool sem_check_pcall(tree_t t)
       const char *fname = istr(tree_ident2(t));
 
       p += snprintf(p, end - p, "%s(", fname);
-      for (unsigned i = 0; i < tree_params(t); i++)
+      for (i = 0; i < tree_params(t); i++)
          p += snprintf(p, end - p, "%s%s",
                        (i == 0 ? "" : ", "),
                        istr(type_ident(tree_type(tree_param(t, i).value))));
@@ -2456,7 +2603,7 @@ static bool sem_check_pcall(tree_t t)
                 fn);
    }
 
-   for (unsigned i = 0; i < tree_params(t); i++) {
+   for (i = 0; i < tree_params(t); i++) {
       param_t param = tree_param(t, i);
       tree_t  port  = tree_port(decl, i);
 
@@ -2550,12 +2697,16 @@ static tree_t sem_array_len(type_t type)
 
 static bool sem_check_concat_param(tree_t t, type_t expect)
 {
+   type_kind_t expect_k;
+   unsigned i;
+   bool ok;
+
    while (type_kind(expect) == T_SUBTYPE)
       expect = type_base(expect);
 
    type_set_push();
 
-   type_kind_t expect_k = type_kind(expect);
+   expect_k = type_kind(expect);
 
    if (expect_k == T_CARRAY) {
       // The bounds of one side should not be used to determine
@@ -2563,7 +2714,7 @@ static bool sem_check_concat_param(tree_t t, type_t expect)
       type_t u = type_new(T_UARRAY);
       type_set_elem(u, type_elem(expect));
       type_set_ident(u, type_ident(expect));
-      for (unsigned i = 0; i < type_dims(expect); i++)
+      for (i = 0; i < type_dims(expect); i++)
          type_add_index_constr(u, tree_type(type_dim(expect, i).left));
       type_set_add(u);
    }
@@ -2573,7 +2724,7 @@ static bool sem_check_concat_param(tree_t t, type_t expect)
    if (expect_k == T_CARRAY || expect_k == T_UARRAY)
       type_set_add(type_elem(expect));
 
-   bool ok = sem_check(t);
+   ok = sem_check(t);
    type_set_pop();
 
    return ok;
@@ -2589,22 +2740,26 @@ static type_t sem_index_type(type_t type)
 
 static bool sem_check_concat(tree_t t)
 {
+   tree_t left, right, other;
+   type_t composite, expect;
+   bool uniq_comp, ok;
+   bool left_ambig, right_ambig;
+   type_t ltype, rtype;
+   type_kind_t lkind, rkind;
+   bool l_array, r_array;
+
    // Concatenation expressions are treated differently to other operators
    // as they have special rules. See LRM 93 section 9.2.5
 
    assert(tree_params(t) == 2);
-   tree_t left  = tree_param(t, 0).value;
-   tree_t right = tree_param(t, 1).value;
+   left  = tree_param(t, 0).value;
+   right = tree_param(t, 1).value;
 
-   type_t composite;
-   bool uniq_comp = type_set_uniq_composite(&composite);
-   type_t expect = composite;
+   uniq_comp = type_set_uniq_composite(&composite);
+   expect = composite;
 
-   bool ok;
-   tree_t other;
-
-   bool left_ambig  = sem_maybe_ambiguous(left);
-   bool right_ambig = sem_maybe_ambiguous(right);
+   left_ambig  = sem_maybe_ambiguous(left);
+   right_ambig = sem_maybe_ambiguous(right);
 
    if (left_ambig && right_ambig) {
       if (!uniq_comp)
@@ -2628,27 +2783,34 @@ static bool sem_check_concat(tree_t t)
    if (!(ok && sem_check_concat_param(other, expect)))
       return false;
 
-   type_t ltype = tree_type(left);
-   type_t rtype = tree_type(right);
+   ltype = tree_type(left);
+   rtype = tree_type(right);
 
-   type_kind_t lkind = type_kind(ltype);
-   type_kind_t rkind = type_kind(rtype);
+   lkind = type_kind(ltype);
+   rkind = type_kind(rtype);
 
-   bool l_array = type_is_array(ltype);
-   bool r_array = type_is_array(rtype);
+   l_array = type_is_array(ltype);
+   r_array = type_is_array(rtype);
 
    if (l_array && r_array) {
+      type_t index_type;
+      range_t index_r;
+      type_t std_int;
+      tree_t left_len, right_len;
+      type_t result;
+      tree_t one, result_len, tmp, result_right;
+      range_t result_r;
+
       if (!type_eq(ltype, rtype))
          sem_error(t, "cannot concatenate arrays of different types");
 
       if (sem_array_dimension(ltype) > 1)
          sem_error(t, "cannot concatenate arrays with more than one dimension");
 
-      type_t index_type = sem_index_type(ltype);
-      range_t index_r = type_dim(index_type, 0);
+      index_type = sem_index_type(ltype);
+      index_r = type_dim(index_type, 0);
 
-      type_t std_int = sem_std_type("INTEGER");
-      tree_t left_len, right_len;
+      std_int = sem_std_type("INTEGER");
 
       if (lkind == T_UARRAY)
          left_len = call_builtin("length", std_int, left, NULL);
@@ -2660,36 +2822,45 @@ static bool sem_check_concat(tree_t t)
       else
          right_len = sem_array_len(rtype);
 
-      type_t result = type_new(T_SUBTYPE);
+      result = type_new(T_SUBTYPE);
       type_set_ident(result, type_ident(ltype));
       type_set_base(result, ltype);
 
-      tree_t one = sem_int_lit(index_type, 1);
+      one = sem_int_lit(index_type, 1);
 
-      tree_t result_len = call_builtin(
+      result_len = call_builtin(
          "add", index_type, left_len, right_len, NULL);
-      tree_t tmp = call_builtin(
+      tmp = call_builtin(
          "add", index_type, result_len, index_r.left, NULL);
-      tree_t result_right = call_builtin(
+      result_right = call_builtin(
          "sub", index_type, tmp, one, NULL);
 
-      range_t result_r = {
-         .kind  = index_r.kind,
-         .left  = index_r.left,
-         .right = result_right
-      };
+      result_r.kind  = index_r.kind;
+      result_r.left  = index_r.left;
+      result_r.right = result_right;
       type_add_dim(result, result_r);
 
       tree_set_type(t, result);
    }
    else if (r_array || l_array) {
-      tree_t array  = (l_array ? left : right);
-      tree_t scalar = (l_array ? right : left);
+      tree_t array, scalar;
+      type_t atype, stype;
+      type_kind_t akind;
+      type_t index_type;
+      range_t index_r;
+      type_t std_int;
+      tree_t array_len;
+      tree_t result_right;
+      type_t result;
+      range_t result_r;
 
-      type_t atype = tree_type(array);
-      type_t stype = tree_type(scalar);
+      array  = (l_array ? left : right);
+      scalar = (l_array ? right : left);
 
-      type_kind_t akind = type_kind(atype);
+      atype = tree_type(array);
+      stype = tree_type(scalar);
+
+      akind = type_kind(atype);
 
       if (sem_array_dimension(atype) > 1)
          sem_error(t, "cannot concatenate arrays with more than one dimension");
@@ -2697,53 +2868,54 @@ static bool sem_check_concat(tree_t t)
       if (!type_eq(stype, type_elem(atype)))
          sem_error(t, "type of scalar does not match element type of array");
 
-      type_t index_type = sem_index_type(atype);
-      range_t index_r = type_dim(index_type, 0);
+      index_type = sem_index_type(atype);
+      index_r = type_dim(index_type, 0);
 
-      type_t std_int = sem_std_type("INTEGER");
-      tree_t array_len;
+      std_int = sem_std_type("INTEGER");
       if (akind == T_UARRAY)
          array_len = call_builtin("length", std_int, array, NULL);
       else
          array_len = sem_array_len(atype);
 
-      tree_t result_right = call_builtin(
+      result_right = call_builtin(
          "add", index_type, index_r.left, array_len, NULL);
 
-      type_t result = type_new(T_SUBTYPE);
+      result = type_new(T_SUBTYPE);
       type_set_ident(result, type_ident(atype));
       type_set_base(result, atype);
 
-      range_t result_r = {
-         .kind  = index_r.kind,
-         .left  = index_r.left,
-         .right = result_right
-      };
+      result_r.kind  = index_r.kind;
+      result_r.left  = index_r.left;
+      result_r.right = result_right;
       type_add_dim(result, result_r);
 
       tree_set_type(t, result);
    }
    else {
+      type_t index_type;
+      range_t index_r;
+      tree_t result_right;
+      type_t result;
+      range_t result_r;
+
       // Concatenating two scalars
 
       if (!type_eq(ltype, rtype))
          sem_error(t, "cannot concatenate values of different types");
 
-      type_t index_type = sem_index_type(composite);
-      range_t index_r = type_dim(index_type, 0);
+      index_type = sem_index_type(composite);
+      index_r = type_dim(index_type, 0);
 
-      tree_t result_right = call_builtin(
+      result_right = call_builtin(
          "add", index_type, index_r.left, sem_int_lit(index_type, 1), NULL);
 
-      type_t result = type_new(T_SUBTYPE);
+      result = type_new(T_SUBTYPE);
       type_set_ident(result, type_ident(composite));
       type_set_base(result, composite);
 
-      range_t result_r = {
-         .kind  = index_r.kind,
-         .left  = index_r.left,
-         .right = result_right
-      };
+      result_r.kind  = index_r.kind;
+      result_r.left  = index_r.left;
+      result_r.right = result_right;
       type_add_dim(result, result_r);
 
       tree_set_type(t, result);
@@ -2769,27 +2941,34 @@ static bool sem_check_literal(tree_t t)
 
 static bool sem_check_aggregate(tree_t t)
 {
+   type_t composite_type, base_type;
+   enum { POS, NAMED, OTHERS } state;
+   bool have_named;
+   bool have_pos;
+   unsigned i;
+   bool array;
+   type_t elem_type;
+
    // Rules for aggregates are in LRM 93 section 7.3.2
 
    // The type of an aggregate must be determinable solely from the
    // context in which the aggregate appears
 
-   type_t composite_type;
    if (!type_set_uniq_composite(&composite_type))
       sem_error(t, "type of aggregate is ambiguous");
 
-   type_t base_type = composite_type;
+   base_type = composite_type;
    while (type_kind(base_type) == T_SUBTYPE)
       base_type = type_base(base_type);
 
    // All positional associations must appear before named associations
    // and those must appear before any others association
 
-   enum { POS, NAMED, OTHERS } state = POS;
-   bool have_named = false;
-   bool have_pos = false;
+   state = POS;
+   have_named = false;
+   have_pos = false;
 
-   for (unsigned i = 0; i < tree_assocs(t); i++) {
+   for (i = 0; i < tree_assocs(t); i++) {
       assoc_t a = tree_assoc(t, i);
 
       switch (a.kind) {
@@ -2823,8 +3002,8 @@ static bool sem_check_aggregate(tree_t t)
    // Named and positional associations cannot be mixed in array
    // aggregates
 
-   bool array = (type_kind(base_type) == T_CARRAY
-                 || type_kind(base_type) == T_UARRAY);
+   array = (type_kind(base_type) == T_CARRAY
+            || type_kind(base_type) == T_UARRAY);
    if (array && have_named && have_pos)
       sem_error(t, "named and positional associations cannot be "
                 "mixed in array aggregates");
@@ -2833,14 +3012,17 @@ static bool sem_check_aggregate(tree_t t)
    // array type
 
    if (type_kind(composite_type) == T_UARRAY) {
-      type_t tmp = type_new(T_CARRAY);
+      type_t tmp, index_type;
+      range_t index_r;
+
+      tmp = type_new(T_CARRAY);
       type_set_ident(tmp, type_ident(composite_type));
       type_set_elem(tmp, type_elem(composite_type));  // Element type
 
       assert(type_index_constrs(composite_type) == 1);  // TODO
 
-      type_t index_type = type_index_constr(composite_type, 0);
-      range_t index_r = type_dim(index_type, 0);
+      index_type = type_index_constr(composite_type, 0);
+      index_r = type_dim(index_type, 0);
 
       if (have_named) {
          tree_t low = call_builtin("agg_low", index_type, t, NULL);
@@ -2872,7 +3054,7 @@ static bool sem_check_aggregate(tree_t t)
    // a one-dimensional array otherwise construct an array type
    // with n-1 dimensions.
 
-   type_t elem_type = NULL;
+   elem_type = NULL;
    if (type_dims(composite_type) == 1)
       elem_type = type_elem(base_type);
    else {
@@ -2880,11 +3062,11 @@ static bool sem_check_aggregate(tree_t t)
       type_set_ident(elem_type, type_ident(composite_type));
       type_set_elem(elem_type, type_elem(base_type));
 
-      for (unsigned i = 1; i < type_dims(composite_type); i++)
+      for (i = 1; i < type_dims(composite_type); i++)
          type_add_dim(elem_type, type_dim(composite_type, i));
    }
 
-   for (unsigned i = 0; i < tree_assocs(t); i++) {
+   for (i = 0; i < tree_assocs(t); i++) {
       assoc_t a = tree_assoc(t, i);
 
       switch (a.kind) {
@@ -2917,7 +3099,7 @@ static bool sem_check_aggregate(tree_t t)
    // If a named choice is not locally static then it must be the
    // only element
 
-   for (unsigned i = 0; i < tree_assocs(t); i++) {
+   for (i = 0; i < tree_assocs(t); i++) {
       assoc_t a = tree_assoc(t, i);
       if (a.kind == A_NAMED && !sem_locally_static(a.name)) {
          if (tree_assocs(t) != 1)
@@ -2982,30 +3164,37 @@ static bool sem_check_ref(tree_t t)
 
 static bool sem_check_array_ref(tree_t t)
 {
-   tree_t value = tree_value(t);
+   tree_t value;
+   type_t type;
+   unsigned nindex;
+   bool ok;
+   unsigned i;
+   type_t expect;
+
+   value = tree_value(t);
    if (!sem_check(value))
       return false;
 
-   type_t type = tree_type(tree_value(t));
+   type = tree_type(tree_value(t));
 
    if (!type_is_array(type))
       sem_error(t, "invalid array reference");
 
-   unsigned nindex = (type_kind(type) == T_UARRAY
-                      ? type_index_constrs(type)
-                      : type_dims(type));
+   nindex = (type_kind(type) == T_UARRAY
+             ? type_index_constrs(type)
+             : type_dims(type));
 
    if (tree_params(t) != nindex)
       sem_error(t, "array %s has %d dimensions but %d indices given",
                 istr(tree_ident(value)), nindex, tree_params(t));
 
-   bool ok = true;
-   for (unsigned i = 0; i < tree_params(t); i++) {
+   ok = true;
+   for (i = 0; i < tree_params(t); i++) {
       param_t p = tree_param(t, i);
       if (p.kind != P_POS)
          sem_error(t, "only scalar references supported");
 
-      type_t expect = sem_index_type(type);
+      expect = sem_index_type(type);
 
       ok = sem_check_constrained(p.value, expect) && ok;
 
@@ -3022,25 +3211,30 @@ static bool sem_check_array_ref(tree_t t)
 
 static bool sem_check_array_slice(tree_t t)
 {
+   type_t array_type;
+   range_t r;
+   bool ok, wrong_dir;
+   type_t slice_type;
+
    if (!sem_check(tree_value(t)))
       return false;
 
-   type_t array_type = tree_type(tree_value(t));
+   array_type = tree_type(tree_value(t));
 
    if (!type_is_array(array_type))
       sem_error(t, "type of slice prefix is not an array");
 
    type_set_push();
    type_set_add(sem_std_type("INTEGER"));
-   range_t r = tree_range(t);
-   bool ok = sem_check_range(&r);
+   r = tree_range(t);
+   ok = sem_check_range(&r);
    tree_set_range(t, r);
    type_set_pop();
 
    if (!ok)
       return false;
 
-   bool wrong_dir =
+   wrong_dir =
       (type_kind(array_type) != T_UARRAY)
       && (r.kind != type_dim(array_type, 0).kind)
       && (type_dim(array_type, 0).kind != RANGE_DYN);
@@ -3048,7 +3242,7 @@ static bool sem_check_array_slice(tree_t t)
    if (wrong_dir)
       sem_error(t, "range direction of slice does not match prefix");
 
-   type_t slice_type = type_new(T_SUBTYPE);
+   slice_type = type_new(T_SUBTYPE);
    type_set_ident(slice_type, type_ident(array_type));
    type_set_base(slice_type, array_type);
    type_add_dim(slice_type, tree_range(t));
@@ -3059,7 +3253,10 @@ static bool sem_check_array_slice(tree_t t)
 
 static bool sem_check_attr_ref(tree_t t)
 {
-   tree_t decl = scope_find(tree_ident(t));
+   tree_t decl, a;
+   unsigned i;
+
+   decl = scope_find(tree_ident(t));
 
    if (decl == NULL)
       sem_error(t, "undefined identifier %s", istr(tree_ident(t)));
@@ -3067,7 +3264,7 @@ static bool sem_check_attr_ref(tree_t t)
    if (icmp(tree_ident2(t), "range"))
       sem_error(t, "range expression not allowed here");
 
-   tree_t a = tree_attr_tree(decl, tree_ident2(t));
+   a = tree_attr_tree(decl, tree_ident2(t));
    if (a == NULL)
       sem_error(t, "%s has no attribute %s",
                 istr(tree_ident(t)), istr(tree_ident2(t)));
@@ -3077,11 +3274,14 @@ static bool sem_check_attr_ref(tree_t t)
       tree_set_type(t, type_result(ftype));
 
       if (tree_params(t) == 0) {
+         tree_t ref;
+         param_t p;
          // For an expression X'A add X as the final parameter
-         tree_t ref = sem_make_ref(decl);
+         ref = sem_make_ref(decl);
          tree_set_loc(ref, tree_loc(t));
 
-         param_t p = { .kind = P_POS, .value = ref };
+         p.kind = P_POS;
+         p.value = ref;
          tree_add_param(t, p);
       }
 
@@ -3090,12 +3290,15 @@ static bool sem_check_attr_ref(tree_t t)
                    "but have %d", type_params(ftype),
                    istr(tree_ident2(t)), tree_params(t));
 
-      for (unsigned i = 0; i < tree_params(t); i++) {
-         param_t p = tree_param(t, i);
+      for (i = 0; i < tree_params(t); i++) {
+         param_t p;
+         type_t expect_type;
+
+         p = tree_param(t, i);
          if (p.kind != P_POS)
             sem_error(t, "only positional arguments supported here");
 
-         type_t expect_type = type_param(ftype, i);
+         expect_type = type_param(ftype, i);
          if (!sem_check_constrained(p.value, expect_type))
             return false;
 
@@ -3140,12 +3343,14 @@ static bool sem_check_map(tree_t t, tree_t unit,
       bool   have;
    } formals[nformals];
 
-   for (unsigned i = 0; i < nformals; i++) {
+   unsigned i, j;
+
+   for (i = 0; i < nformals; i++) {
       formals[i].decl = tree_F(unit, i);
       formals[i].have = false;
    }
 
-   for (unsigned i = 0; i < tree_As(t); i++) {
+   for (i = 0; i < tree_As(t); i++) {
       param_t p = tree_A(t, i);
       tree_t decl = NULL;
       switch (p.kind) {
@@ -3160,13 +3365,13 @@ static bool sem_check_map(tree_t t, tree_t unit,
          break;
 
       case P_NAMED:
-         for (unsigned i = 0; i < nformals; i++) {
-            if (tree_ident(formals[i].decl) == p.name) {
-               if (formals[i].have)
+         for (j = 0; j < nformals; j++) {
+            if (tree_ident(formals[j].decl) == p.name) {
+               if (formals[j].have)
                   sem_error(p.value, "formal %s already has an actual",
-                            istr(tree_ident(formals[i].decl)));
-               formals[i].have = true;
-               decl = formals[i].decl;
+                            istr(tree_ident(formals[j].decl)));
+               formals[j].have = true;
+               decl = formals[j].decl;
                break;
             }
          }
@@ -3183,7 +3388,7 @@ static bool sem_check_map(tree_t t, tree_t unit,
       ok = sem_check_constrained(p.value, tree_type(decl)) && ok;
    }
 
-   for (unsigned i = 0; i < nformals; i++) {
+   for (i = 0; i < nformals; i++) {
       if (!formals[i].have && !tree_has_value(formals[i].decl))
          sem_error(t, "missing actual for formal %s",
                    istr(tree_ident(formals[i].decl)));
@@ -3216,9 +3421,14 @@ static bool sem_check_instance(tree_t t)
 
 static bool sem_check_if(tree_t t)
 {
-   type_t std_bool = sem_std_type("BOOLEAN");
+   type_t std_bool;
+   tree_t value;
+   bool ok;
+   unsigned i;
 
-   tree_t value = tree_value(t);
+   std_bool = sem_std_type("BOOLEAN");
+
+   value = tree_value(t);
    if (!sem_check_constrained(value, std_bool))
       return false;
 
@@ -3227,10 +3437,10 @@ static bool sem_check_if(tree_t t)
                 istr(type_ident(std_bool)),
                 istr(type_ident(tree_type(value))));
 
-   bool ok = true;
-   for (unsigned i = 0; i < tree_stmts(t); i++)
+   ok = true;
+   for (i = 0; i < tree_stmts(t); i++)
       ok = sem_check(tree_stmt(t, i)) && ok;
-   for (unsigned i = 0; i < tree_else_stmts(t); i++)
+   for (i = 0; i < tree_else_stmts(t); i++)
       ok = sem_check(tree_else_stmt(t, i)) && ok;
 
    return ok;
@@ -3238,10 +3448,15 @@ static bool sem_check_if(tree_t t)
 
 static bool sem_locally_static(tree_t t)
 {
+   type_t type;
+   tree_kind_t kind;
+   bool all_static;
+   unsigned i;
+
    // Rules for locally static expressions are in LRM 93 7.4.1
 
-   type_t type = tree_type(t);
-   tree_kind_t kind = tree_kind(t);
+   type = tree_type(t);
+   kind = tree_kind(t);
 
    // Any literal other than of type time
    if (kind == T_LITERAL) {
@@ -3265,8 +3480,8 @@ static bool sem_locally_static(tree_t t)
       if (tree_attr_str(decl, builtin_i) == NULL)
          return false;
 
-      bool all_static = true;
-      for (unsigned i = 0; i < tree_params(t); i++) {
+      all_static = true;
+      for (i = 0; i < tree_params(t); i++) {
          param_t p = tree_param(t, i);
          all_static = all_static && sem_locally_static(p.value);
       }
@@ -3293,7 +3508,7 @@ static bool sem_locally_static(tree_t t)
       if (!sem_locally_static(r.left) || !sem_locally_static(r.right))
          return false;
 
-      for (unsigned i = 0; i < tree_assocs(t); i++) {
+      for (i = 0; i < tree_assocs(t); i++) {
          assoc_t a = tree_assoc(t, i);
          if ((a.kind == A_NAMED) && !sem_locally_static(a.name))
             return false;
@@ -3310,14 +3525,19 @@ static bool sem_locally_static(tree_t t)
 
 static bool sem_check_case(tree_t t)
 {
-   tree_t test = tree_value(t);
+   tree_t test;
+   type_t type;
+   bool ok;
+   unsigned i;
+
+   test = tree_value(t);
    if (!sem_check(test))
       return false;
 
-   type_t type = tree_type(test);
+   type = tree_type(test);
 
-   bool ok = true;
-   for (unsigned i = 0; i < tree_assocs(t); i++) {
+   ok = true;
+   for (i = 0; i < tree_assocs(t); i++) {
       assoc_t a = tree_assoc(t, i);
       switch (a.kind) {
       case A_OTHERS:
@@ -3349,6 +3569,8 @@ static bool sem_check_case(tree_t t)
 
 static bool sem_check_return(tree_t t)
 {
+   type_t expect;
+
    if (top_scope->subprog == NULL)
       sem_error(t, "return statement not allowed outside subprogram");
 
@@ -3356,7 +3578,7 @@ static bool sem_check_return(tree_t t)
       if (tree_kind(top_scope->subprog) == T_PROC_BODY)
          sem_error(t, "cannot return a value from a procedure");
 
-      type_t expect = type_result(tree_type(top_scope->subprog));
+      expect = type_result(tree_type(top_scope->subprog));
 
       if (!sem_check_constrained(tree_value(t), expect))
          return false;
@@ -3370,9 +3592,14 @@ static bool sem_check_return(tree_t t)
 
 static bool sem_check_while(tree_t t)
 {
-   type_t std_bool = sem_std_type("BOOLEAN");
+   type_t std_bool;
+   tree_t value;
+   bool ok;
+   unsigned i;
 
-   tree_t value = tree_value(t);
+   std_bool = sem_std_type("BOOLEAN");
+
+   value = tree_value(t);
    if (!sem_check_constrained(value, std_bool))
       return false;
 
@@ -3381,8 +3608,8 @@ static bool sem_check_while(tree_t t)
                 istr(type_ident(std_bool)),
                 istr(type_ident(tree_type(value))));
 
-   bool ok = true;
-   for (unsigned i = 0; i < tree_stmts(t); i++)
+   ok = true;
+   for (i = 0; i < tree_stmts(t); i++)
       ok = sem_check(tree_stmt(t, i)) && ok;
 
    return ok;
@@ -3390,12 +3617,17 @@ static bool sem_check_while(tree_t t)
 
 static bool sem_check_for(tree_t t)
 {
-   range_t r = tree_range(t);
+   range_t r;
+   tree_t idecl;
+   bool ok;
+   unsigned i;
+
+   r = tree_range(t);
    if (!sem_check_range(&r))
       return false;
    tree_set_range(t, r);
 
-   tree_t idecl = tree_new(T_VAR_DECL);
+   idecl = tree_new(T_VAR_DECL);
    tree_set_ident(idecl, tree_ident2(t));
    tree_set_loc(idecl, tree_loc(t));
    tree_set_type(idecl, tree_type(r.left));
@@ -3405,8 +3637,8 @@ static bool sem_check_for(tree_t t)
    scope_push(NULL);
    scope_insert(idecl);
 
-   bool ok = true;
-   for (unsigned i = 0; i < tree_stmts(t); i++)
+   ok = true;
+   for (i = 0; i < tree_stmts(t); i++)
       ok = sem_check(tree_stmt(t, i)) && ok;
 
    scope_pop();
@@ -3415,14 +3647,17 @@ static bool sem_check_for(tree_t t)
 
 static bool sem_check_block(tree_t t)
 {
+   bool ok;
+   unsigned i;
+
    scope_push(NULL);
 
-   bool ok = true;
+   ok = true;
 
-   for (unsigned i = 0; i < tree_decls(t); i++)
+   for (i = 0; i < tree_decls(t); i++)
       ok = sem_check(tree_decl(t, i)) && ok;
 
-   for (unsigned i = 0; i < tree_stmts(t); i++)
+   for (i = 0; i < tree_stmts(t); i++)
       ok = sem_check(tree_stmt(t, i)) && ok;
 
    scope_pop();
@@ -3431,12 +3666,14 @@ static bool sem_check_block(tree_t t)
 
 static bool sem_check_exit(tree_t t)
 {
+   type_t std_bool;
+
    if (tree_has_value(t)) {
       tree_t value = tree_value(t);
       if (!sem_check(value))
          return false;
 
-      type_t std_bool = sem_std_type("BOOLEAN");
+      std_bool = sem_std_type("BOOLEAN");
       if (!type_eq(tree_type(value), std_bool))
          sem_error(value, "type of exit condition must be %s but is %s",
                    istr(type_ident(std_bool)),
@@ -3448,13 +3685,17 @@ static bool sem_check_exit(tree_t t)
 
 static bool sem_check_select(tree_t t)
 {
+   type_t value_type;
+   unsigned i;
+   assoc_t a;
+
    if (!sem_check(tree_value(t)))
       return false;
 
-   type_t value_type = tree_type(tree_value(t));
+   value_type = tree_type(tree_value(t));
 
-   for (unsigned i = 0; i < tree_assocs(t); i++) {
-      assoc_t a = tree_assoc(t, i);
+   for (i = 0; i < tree_assocs(t); i++) {
+      a = tree_assoc(t, i);
       if (a.kind == A_NAMED) {
          if (!sem_check_constrained(a.name, value_type))
             return false;
@@ -3485,11 +3726,15 @@ static bool sem_check_attr_decl(tree_t t)
 
 static bool sem_check_attr_spec(tree_t t)
 {
-   tree_t attr_decl = scope_find(tree_ident(t));
+   tree_t attr_decl, obj_decl;
+   type_t type;
+   tree_t value;
+
+   attr_decl = scope_find(tree_ident(t));
    if (attr_decl == NULL)
       sem_error(t, "undefined attribute %s", istr(tree_ident(t)));
 
-   tree_t obj_decl = scope_find(tree_ident2(t));
+   obj_decl = scope_find(tree_ident2(t));
    if (obj_decl == NULL)
       sem_error(t, "undefined identifier %s", istr(tree_ident2(t)));
 
@@ -3497,9 +3742,9 @@ static bool sem_check_attr_spec(tree_t t)
       sem_error(t, "name %s is not an attribute declaration",
                 istr(tree_ident(t)));
 
-   type_t type = tree_type(attr_decl);
+   type = tree_type(attr_decl);
 
-   tree_t value = tree_value(t);
+   value = tree_value(t);
    if (!sem_check_constrained(value, type))
       return false;
 

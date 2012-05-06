@@ -25,14 +25,19 @@ static int errors = 0;
 
 static void whole_array_driver(tree_t decl, tree_t proc)
 {
-   type_t type = tree_type(decl);
-
+   type_t type;
    int64_t low, high;
+   int i;
+   bool already;
+   unsigned j;
+
+   type = tree_type(decl);
+
    range_bounds(type_dim(type, 0), &low, &high);
 
-   for (int i = 0; i < high - low + 1; i++) {
-      bool already = false;
-      for (unsigned j = 0; j < tree_sub_drivers(decl, i); j++) {
+   for (i = 0; i < high - low + 1; i++) {
+      already = false;
+      for (j = 0; j < tree_sub_drivers(decl, i); j++) {
          if (tree_sub_driver(decl, i, j) == proc)
             already = true;
       }
@@ -44,16 +49,20 @@ static void whole_array_driver(tree_t decl, tree_t proc)
 
 static void whole_signal_driver(tree_t ref, tree_t proc)
 {
-   tree_t decl = tree_ref(ref);
+   tree_t decl;
+   type_t type;
+   unsigned i;
 
-   type_t type = tree_type(decl);
+   decl = tree_ref(ref);
+
+   type = tree_type(decl);
    if (type_kind(type) == T_CARRAY || type_kind(type) == T_UARRAY) {
       // Break an array driver into a driver for each sub-element
       whole_array_driver(decl, proc);
       return;
    }
 
-   for (unsigned i = 0; i < tree_drivers(decl); i++) {
+   for (i = 0; i < tree_drivers(decl); i++) {
       if (tree_driver(decl, i) == proc)
          return;
    }
@@ -71,20 +80,25 @@ static void whole_signal_driver(tree_t ref, tree_t proc)
 
 static void part_signal_driver(tree_t ref, tree_t proc)
 {
-   tree_t value = tree_value(ref);
-   assert(tree_kind(value) == T_REF);
-
-   tree_t decl = tree_ref(value);
-   assert(tree_kind(decl) == T_SIGNAL_DECL);
-
-   type_t type = tree_type(decl);
-   assert(type_kind(type) == T_CARRAY);
-
+   tree_t value;
+   tree_t decl;
+   type_t type;
    int64_t type_low, type_high;
-   range_bounds(type_dim(type, 0), &type_low, &type_high);
-
    int64_t slice_low, slice_high;
    bool no_static_prefix;
+   unsigned elem, j;
+   bool already_driver;
+
+   value = tree_value(ref);
+   assert(tree_kind(value) == T_REF);
+
+   decl = tree_ref(value);
+   assert(tree_kind(decl) == T_SIGNAL_DECL);
+
+   type = tree_type(decl);
+   assert(type_kind(type) == T_CARRAY);
+
+   range_bounds(type_dim(type, 0), &type_low, &type_high);
 
    switch (tree_kind(ref)) {
    case T_ARRAY_SLICE:
@@ -122,11 +136,11 @@ static void part_signal_driver(tree_t ref, tree_t proc)
       return;
    }
 
-   for (unsigned elem = slice_low; elem <= slice_high; elem++) {
+   for (elem = slice_low; elem <= slice_high; elem++) {
       assert(elem >= type_low && elem <= type_high);
 
-      bool already_driver = false;
-      for (unsigned j = 0; j < tree_sub_drivers(decl, elem); j++) {
+      already_driver = false;
+      for (j = 0; j < tree_sub_drivers(decl, elem); j++) {
          if (tree_sub_driver(decl, elem, j) == proc)
             already_driver = true;
       }
@@ -148,11 +162,13 @@ static void part_signal_driver(tree_t ref, tree_t proc)
 
 static void proc_visit_cb(tree_t t, void *context)
 {
+   tree_t proc, target;
+
    assert(tree_kind(t) == T_SIGNAL_ASSIGN);
 
-   tree_t proc = (tree_t)context;
+   proc = (tree_t)context;
 
-   tree_t target = tree_target(t);
+   target = tree_target(t);
    switch (tree_kind(target)) {
    case T_REF:
       whole_signal_driver(target, proc);
@@ -175,9 +191,11 @@ static void drivers_from_process(tree_t t)
 
 void driver_extract(tree_t top)
 {
+   unsigned i;
+
    assert(tree_kind(top) == T_ELAB);
 
-   for (unsigned i = 0; i < tree_stmts(top); i++)
+   for (i = 0; i < tree_stmts(top); i++)
       drivers_from_process(tree_stmt(top, i));
 }
 

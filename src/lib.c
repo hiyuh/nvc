@@ -58,18 +58,25 @@ static struct lib_list *loaded = NULL;
 
 static ident_t upcase_name(const char *name)
 {
-   char *name_up = strdup(name);
-   for (char *p = name_up; *p != '\0'; p++)
+   char *name_up;
+   char *p;
+   ident_t i;
+
+   name_up = strdup(name);
+   for (p = name_up; *p != '\0'; p++)
       *p = toupper((uint8_t)*p);
 
-   ident_t i = ident_new(name_up);
+   i = ident_new(name_up);
    free(name_up);
    return i;
 }
 
 static lib_t lib_init(const char *name, const char *rpath)
 {
-   struct lib *l = xmalloc(sizeof(struct lib));
+   struct lib *l;
+   struct lib_list *el;
+
+   l = xmalloc(sizeof(struct lib));
    l->n_units = 0;
    l->units   = NULL;
    l->name    = upcase_name(name);
@@ -77,7 +84,7 @@ static lib_t lib_init(const char *name, const char *rpath)
    if (realpath(rpath, l->path) == NULL)
       strncpy(l->path, rpath, PATH_MAX);
 
-   struct lib_list *el = xmalloc(sizeof(struct lib_list));
+   el = xmalloc(sizeof(struct lib_list));
    el->item = l;
    el->next = loaded;
    loaded = el;
@@ -89,6 +96,8 @@ static struct lib_unit *lib_put_aux(lib_t lib, tree_t unit,
                                     tree_rd_ctx_t ctx, bool dirty,
                                     lib_mtime_t mtime)
 {
+   unsigned n;
+
    assert(lib != NULL);
    assert(unit != NULL);
 
@@ -102,7 +111,7 @@ static struct lib_unit *lib_put_aux(lib_t lib, tree_t unit,
                             sizeof(struct lib_unit) * lib->units_alloc);
    }
 
-   unsigned n = lib->n_units++;
+   n = lib->n_units++;
    lib->units[n].top      = unit;
    lib->units[n].read_ctx = ctx;
    lib->units[n].dirty    = dirty;
@@ -114,16 +123,18 @@ static struct lib_unit *lib_put_aux(lib_t lib, tree_t unit,
 static lib_t lib_find_at(const char *name, const char *path)
 {
    char dir[PATH_MAX];
+   char *p;
+   char marker[PATH_MAX];
+
    snprintf(dir, sizeof(dir), "%s/%s", path, name);
 
    // Convert to lower case
-   for (char *p = dir; *p != '\0'; p++)
+   for (p = dir; *p != '\0'; p++)
       *p = tolower((uint8_t)*p);
 
    if (access(dir, F_OK) < 0)
       return NULL;
 
-   char marker[PATH_MAX];
    snprintf(marker, sizeof(marker), "%s/_NVC_LIB", dir);
    if (access(marker, F_OK) < 0)
       return NULL;
@@ -140,6 +151,9 @@ static const char *lib_file_path(lib_t lib, const char *name)
 
 lib_t lib_new(const char *name)
 {
+   lib_t l;
+   FILE *tag;
+
    if (access(name, F_OK) == 0) {
       errorf("file %s already exists", name);
       return NULL;
@@ -150,9 +164,9 @@ lib_t lib_new(const char *name)
       return NULL;
    }
 
-   lib_t l = lib_init(name, name);
+   l = lib_init(name, name);
 
-   FILE *tag = lib_fopen(l, "_NVC_LIB", "w");
+   tag = lib_fopen(l, "_NVC_LIB", "w");
    fprintf(tag, "%s\n", PACKAGE_STRING);
    fclose(tag);
 
@@ -175,18 +189,26 @@ static void push_path(const char **base, size_t *pidx, const char *path)
 
 lib_t lib_find(const char *name, bool verbose, bool search)
 {
+   struct lib_list *it;
+   const char *paths[MAX_SEARCH_PATHS];
+   size_t idx;
+   char *name_copy;
+   char *sep;
+   char *env_copy;
+   lib_t lib;
+   const char **p;
+
    // Search in already loaded libraries
    ident_t name_i = upcase_name(name);
-   for (struct lib_list *it = loaded; it != NULL; it = it->next) {
+   for (it = loaded; it != NULL; it = it->next) {
       if (lib_name(it->item) == name_i)
          return it->item;
    }
 
-   const char *paths[MAX_SEARCH_PATHS];
-   size_t idx = 0;
 
-   char *name_copy = strdup(name);
-   char *sep = strrchr(name_copy, '/');
+   idx = 0;
+   name_copy = strdup(name);
+   sep = strrchr(name_copy, '/');
    if (sep == NULL)
       push_path(paths, &idx, ".");
    else {
@@ -196,13 +218,15 @@ lib_t lib_find(const char *name, bool verbose, bool search)
       name = sep + 1;
    }
 
-   char *env_copy = NULL;
+   env_copy = NULL;
    if (search) {
       const char *libpath_env = getenv("NVC_LIBPATH");
       if (libpath_env) {
+         char *path_tok;
+
          env_copy = strdup(libpath_env);
 
-         const char *path_tok = strtok(env_copy, ":");
+         path_tok = strtok(env_copy, ":");
          do {
             push_path(paths, &idx, path_tok);
          } while ((path_tok = strtok(NULL, ":")));
@@ -211,8 +235,7 @@ lib_t lib_find(const char *name, bool verbose, bool search)
       push_path(paths, &idx, DATADIR);
    }
 
-   lib_t lib;
-   for (const char **p = paths; *p != NULL; p++) {
+   for (p = paths; *p != NULL; p++) {
       if ((lib = lib_find_at(name, *p))) {
          free(name_copy);
          free(env_copy);
@@ -222,7 +245,7 @@ lib_t lib_find(const char *name, bool verbose, bool search)
 
    if (verbose) {
       errorf("library %s not found in:", name);
-      for (const char **p = paths; *p != NULL; p++) {
+      for (p = paths; *p != NULL; p++) {
          fprintf(stderr, "  %s\n", *p);
       }
    }
@@ -240,9 +263,11 @@ FILE *lib_fopen(lib_t lib, const char *name, const char *mode)
 
 void lib_free(lib_t lib)
 {
+   struct lib_list *it, *prev;
+
    assert(lib != NULL);
 
-   for (struct lib_list *it = loaded, *prev = NULL;
+   for (it = loaded, prev = NULL;
         it != NULL; loaded = it, it = it->next) {
 
       if (it->item == lib) {
@@ -262,19 +287,21 @@ void lib_free(lib_t lib)
 
 void lib_destroy(lib_t lib)
 {
+   DIR *d;
+   char buf[PATH_MAX];
+   struct dirent *e;
+
    // This is convenience function for testing: remove all
    // files associated with a library
 
    assert(lib != NULL);
 
-   DIR *d = opendir(lib->path);
+   d = opendir(lib->path);
    if (d == NULL) {
       perror("opendir");
       return;
    }
 
-   char buf[PATH_MAX];
-   struct dirent *e;
    while ((e = readdir(d))) {
       if (e->d_name[0] != '.') {
          snprintf(buf, sizeof(buf), "%s/%s", lib->path, e->d_name);
@@ -312,10 +339,16 @@ void lib_put(lib_t lib, tree_t unit)
 
 static struct lib_unit *lib_get_aux(lib_t lib, ident_t ident)
 {
+   unsigned n;
+   DIR *d;
+   struct lib_unit *unit;
+   const char *search;
+   struct dirent *e;
+
    assert(lib != NULL);
 
    // Search in the list of already loaded libraries
-   for (unsigned n = 0; n < lib->n_units; n++) {
+   for (n = 0; n < lib->n_units; n++) {
       if (tree_ident(lib->units[n].top) == ident)
          return &(lib->units[n]);
    }
@@ -324,24 +357,28 @@ static struct lib_unit *lib_get_aux(lib_t lib, ident_t ident)
       return NULL;
 
    // Otherwise search in the filesystem
-   DIR *d = opendir(lib->path);
+   d = opendir(lib->path);
    if (d == NULL)
       fatal("%s: %s", lib->path, strerror(errno));
 
-   struct lib_unit *unit = NULL;
-   const char *search = istr(ident);
-   struct dirent *e;
+   unit = NULL;
+   search = istr(ident);
    while ((e = readdir(d))) {
       if (strcmp(e->d_name, search) == 0) {
-         FILE *f = lib_fopen(lib, e->d_name, "r");
-         tree_rd_ctx_t ctx = tree_read_begin(f, lib_file_path(lib, e->d_name));
-         tree_t top = tree_read(ctx);
-
+         FILE *f;
+         tree_rd_ctx_t ctx;
+         tree_t top;
          struct stat st;
+         lib_mtime_t mt;
+
+         f = lib_fopen(lib, e->d_name, "r");
+         ctx = tree_read_begin(f, lib_file_path(lib, e->d_name));
+         top = tree_read(ctx);
+
          if (fstat(fileno(f), &st) < 0)
             fatal_errno("%s", e->d_name);
 
-         lib_mtime_t mt = lib_time_to_usecs(st.st_mtime);
+         mt = lib_time_to_usecs(st.st_mtime);
 #if defined HAVE_STRUCT_STAT_ST_MTIMESPEC_TV_NSEC
          mt += st.st_mtimespec.tv_nsec / 1000;
 #elif defined HAVE_STRUCT_STAT_ST_MTIM_TV_NSEC
@@ -391,16 +428,18 @@ tree_t lib_get(lib_t lib, ident_t ident)
 
 void lib_load_all(lib_t lib)
 {
+   DIR *d;
+   struct dirent *e;
+
    assert(lib != NULL);
 
    if (*(lib->path) == '\0')   // Temporary library
       return;
 
-   DIR *d = opendir(lib->path);
+   d = opendir(lib->path);
    if (d == NULL)
       fatal("%s: %s", lib->path, strerror(errno));
 
-   struct dirent *e;
    while ((e = readdir(d))) {
       if (e->d_name[0] != '.' && e->d_name[0] != '_')
          (void)lib_get(lib, ident_new(e->d_name));
@@ -417,9 +456,11 @@ ident_t lib_name(lib_t lib)
 
 void lib_save(lib_t lib)
 {
+   unsigned n;
+
    assert(lib != NULL);
 
-   for (unsigned n = 0; n < lib->n_units; n++) {
+   for (n = 0; n < lib->n_units; n++) {
       if (lib->units[n].dirty) {
          const char *name = istr(tree_ident(lib->units[n].top));
          FILE *f = lib_fopen(lib, name, "w");
@@ -435,9 +476,11 @@ void lib_save(lib_t lib)
 
 void lib_foreach(lib_t lib, lib_iter_fn_t fn, void *context)
 {
+   unsigned i;
+
    assert(lib != NULL);
 
-   for (unsigned i = 0; i < lib->n_units; i++)
+   for (i = 0; i < lib->n_units; i++)
       (*fn)(lib->units[i].top, context);
 }
 

@@ -21,6 +21,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdarg.h>
+#include <stdlib.h>
 
 #define MAX_BUILTIN_ARGS 2
 
@@ -29,8 +30,10 @@ static ident_t builtin_i  = NULL;
 
 static int errors = 0;
 
+#if !defined SPLINT
 #define simp_error(t, ...) \
    { errors++; error_at(tree_loc(t), __VA_ARGS__); return t; }
+#endif
 
 static tree_t simp_tree(tree_t t, void *context);
 
@@ -60,8 +63,9 @@ static bool folded_bool(tree_t t, bool *b)
 
 static bool folded_agg(tree_t t)
 {
+   unsigned i;
    if (tree_kind(t) == T_AGGREGATE) {
-      for (unsigned i = 0; i < tree_assocs(t); i++) {
+      for (i = 0; i < tree_assocs(t); i++) {
          assoc_t a = tree_assoc(t, i);
          literal_t dummy;
          switch (a.kind) {
@@ -86,14 +90,15 @@ static bool folded_agg(tree_t t)
 
 static tree_t get_int_lit(tree_t t, int64_t i)
 {
+   literal_t l;
+   tree_t f;
    tree_t fdecl = tree_ref(t);
    assert(tree_kind(fdecl) == T_FUNC_DECL);
 
-   literal_t l;
    l.kind = L_INT;
    l.i = i;
 
-   tree_t f = tree_new(T_LITERAL);
+   f = tree_new(T_LITERAL);
    tree_set_loc(f, tree_loc(t));
    tree_set_literal(f, l);
    tree_set_type(f, tree_type(t));
@@ -103,17 +108,19 @@ static tree_t get_int_lit(tree_t t, int64_t i)
 
 static tree_t get_bool_lit(tree_t t, bool v)
 {
+   type_t std_bool;
+   tree_t lit, b;
    tree_t fdecl = tree_ref(t);
    assert(tree_kind(fdecl) == T_FUNC_DECL);
 
-   type_t std_bool = type_result(tree_type(fdecl));
+   std_bool = type_result(tree_type(fdecl));
 
    assert(type_ident(std_bool) == std_bool_i);
    assert(type_enum_literals(std_bool) == 2);
 
-   tree_t lit = type_enum_literal(std_bool, v ? 1 : 0);
+   lit = type_enum_literal(std_bool, v ? 1 : 0);
 
-   tree_t b = tree_new(T_REF);
+   b = tree_new(T_REF);
    tree_set_loc(b, tree_loc(t));
    tree_set_ref(b, lit);
    tree_set_type(b, std_bool);
@@ -195,13 +202,14 @@ static tree_t simp_fcall_num(tree_t t, ident_t builtin, literal_t *args)
 
 static tree_t simp_fcall_agg(tree_t t, ident_t builtin)
 {
+   unsigned i;
    bool agg_low  = icmp(builtin, "agg_low");
    bool agg_high = icmp(builtin, "agg_high");
 
    if (agg_low || agg_high) {
       int64_t low = INT64_MAX, high = INT64_MIN;
       param_t p = tree_param(t, 0);
-      for (unsigned i = 0; i < tree_assocs(p.value); i++) {
+      for (i = 0; i < tree_assocs(p.value); i++) {
          assoc_t a = tree_assoc(p.value, i);
          switch (a.kind) {
          case A_NAMED:
@@ -234,23 +242,26 @@ static tree_t simp_fcall_agg(tree_t t, ident_t builtin)
 
 static tree_t simp_fcall(tree_t t)
 {
+   ident_t builtin;
+   bool can_fold_num = true;
+   bool can_fold_log = true;
+   bool can_fold_agg = true;
+   literal_t largs[MAX_BUILTIN_ARGS];
+   bool bargs[MAX_BUILTIN_ARGS];
+   unsigned i;
+
    tree_t decl = tree_ref(t);
    assert(tree_kind(decl) == T_FUNC_DECL
           || tree_kind(decl) == T_FUNC_BODY);
 
-   ident_t builtin = tree_attr_str(decl, builtin_i);
+   builtin = tree_attr_str(decl, builtin_i);
    if (builtin == NULL)
       return t;     // TODO: expand pure function calls
 
    if (tree_params(t) > MAX_BUILTIN_ARGS)
       return t;
 
-   bool can_fold_num = true;
-   bool can_fold_log = true;
-   bool can_fold_agg = true;
-   literal_t largs[MAX_BUILTIN_ARGS];
-   bool bargs[MAX_BUILTIN_ARGS];
-   for (unsigned i = 0; i < tree_params(t); i++) {
+   for (i = 0; i < tree_params(t); i++) {
       param_t p = tree_param(t, i);
       assert(p.kind == P_POS);
       can_fold_num = can_fold_num && folded_num(p.value, &largs[i]);
@@ -296,13 +307,17 @@ static tree_t simp_ref(tree_t t)
 
 static tree_t simp_attr_ref(tree_t t)
 {
+   ident_t builtin;
+   tree_t fcall;
+   unsigned i;
+
    if (tree_has_value(t))
       return tree_value(t);
    else {
       tree_t decl = tree_ref(t);
       assert(tree_kind(decl) == T_FUNC_DECL);
 
-      ident_t builtin = tree_attr_str(decl, builtin_i);
+      builtin = tree_attr_str(decl, builtin_i);
       assert(builtin != NULL);
 
       if (icmp(builtin, "length")) {
@@ -319,13 +334,13 @@ static tree_t simp_attr_ref(tree_t t)
       }
 
       // Convert attributes like 'EVENT to function calls
-      tree_t fcall = tree_new(T_FCALL);
+      fcall = tree_new(T_FCALL);
       tree_set_loc(fcall, tree_loc(t));
       tree_set_type(fcall, tree_type(t));
       tree_set_ident(fcall, tree_ident2(t));
       tree_set_ref(fcall, decl);
 
-      for (unsigned i = 0; i < tree_params(t); i++)
+      for (i = 0; i < tree_params(t); i++)
          tree_add_param(fcall, tree_param(t, i));
 
       return fcall;
@@ -334,60 +349,80 @@ static tree_t simp_attr_ref(tree_t t)
 
 static tree_t simp_array_ref(tree_t t)
 {
-   tree_t value = tree_value(t);
+   tree_t value, decl;
+   literal_t *indexes;
+   bool can_fold;
+   unsigned i;
+   tree_t v;
+   range_t bounds;
+   int64_t left;
+   int64_t right;
+
+   value = tree_value(t);
    if (tree_kind(value) != T_REF)
       return t;
 
-   tree_t decl = tree_ref(value);
+   decl = tree_ref(value);
 
-   literal_t indexes[tree_params(t)];
-   bool can_fold = true;
-   for (unsigned i = 0; i < tree_params(t); i++) {
+   indexes = (literal_t *)xmalloc(tree_params(t) * sizeof(literal_t));
+   can_fold = true;
+   for (i = 0; i < tree_params(t); i++) {
       param_t p = tree_param(t, i);
       assert(p.kind == P_POS);
       can_fold = can_fold && folded_num(p.value, &indexes[i]);
    }
 
-   if (!can_fold)
+   if (!can_fold) {
+      free(indexes);
       return t;
+   }
 
-   if (tree_params(t) > 1)
+   if (tree_params(t) > 1) {
+      free(indexes);
       return t;  // TODO: constant folding for multi-dimensional arrays
+   }
 
    switch (tree_kind(decl)) {
    case T_CONST_DECL:
       {
-         tree_t v = tree_value(decl);
+         v = tree_value(decl);
          assert(tree_kind(v) == T_AGGREGATE);
          assert(indexes[0].kind == L_INT);
 
-         range_t bounds = type_dim(tree_type(decl), 0);
-         int64_t left = assume_int(bounds.left);
-         int64_t right = assume_int(bounds.right);
+         bounds = type_dim(tree_type(decl), 0);
+         left = assume_int(bounds.left);
+         right = assume_int(bounds.right);
 
          if (indexes[0].i < left || indexes[0].i > right)
             simp_error(t, "array reference out of bounds");
 
-         for (unsigned i = 0; i < tree_assocs(v); i++) {
+         for (i = 0; i < tree_assocs(v); i++) {
             assoc_t a = tree_assoc(v, i);
             switch (a.kind) {
             case A_POS:
-               if (a.pos + left == indexes[0].i)
+               if (a.pos + left == indexes[0].i) {
+                  free(indexes);
                   return a.value;
+               }
                break;
 
             case A_OTHERS:
+               free(indexes);
                return a.value;
 
             case A_RANGE:
                if ((indexes[0].i >= assume_int(a.range.left))
-                   && (indexes[0].i <= assume_int(a.range.right)))
+                   && (indexes[0].i <= assume_int(a.range.right))) {
+                  free(indexes);
                   return a.value;
+               }
                break;
 
             case A_NAMED:
-               if (assume_int(a.name) == indexes[0].i)
+               if (assume_int(a.name) == indexes[0].i) {
+                  free(indexes);
                   return a.value;
+               }
                break;
             }
          }
@@ -395,28 +430,32 @@ static tree_t simp_array_ref(tree_t t)
          assert(false);
       }
    default:
+      free(indexes);
       return t;
    }
 }
 
 static tree_t simp_process(tree_t t)
 {
+   unsigned i;
+   tree_t w;
+
    // Replace sensitivity list with a "wait on" statement
    if (tree_triggers(t) > 0) {
       tree_t p = tree_new(T_PROCESS);
       tree_set_ident(p, tree_ident(t));
       tree_set_loc(p, tree_loc(t));
 
-      for (unsigned i = 0; i < tree_decls(t); i++)
+      for (i = 0; i < tree_decls(t); i++)
          tree_add_decl(p, tree_decl(t, i));
 
-      for (unsigned i = 0; i < tree_stmts(t); i++)
+      for (i = 0; i < tree_stmts(t); i++)
          tree_add_stmt(p, tree_stmt(t, i));
 
-      tree_t w = tree_new(T_WAIT);
+      w = tree_new(T_WAIT);
       tree_set_loc(w, tree_loc(t));
       tree_set_ident(w, tree_ident(p));
-      for (unsigned i = 0; i < tree_triggers(t); i++)
+      for (i = 0; i < tree_triggers(t); i++)
          tree_add_trigger(w, tree_trigger(t, i));
       tree_add_stmt(p, w);
 
@@ -429,6 +468,8 @@ static tree_t simp_process(tree_t t)
 static tree_t simp_if(tree_t t)
 {
    bool value_b;
+   unsigned i;
+
    if (folded_bool(tree_value(t), &value_b)) {
       if (value_b) {
          // If statement always executes so replace with then part
@@ -437,7 +478,7 @@ static tree_t simp_if(tree_t t)
          else {
             tree_t b = tree_new(T_BLOCK);
             tree_set_ident(b, tree_ident(t));
-            for (unsigned i = 0; i < tree_stmts(t); i++)
+            for (i = 0; i < tree_stmts(t); i++)
                tree_add_stmt(b, tree_stmt(t, i));
             return b;
          }
@@ -451,7 +492,7 @@ static tree_t simp_if(tree_t t)
          else {
             tree_t b = tree_new(T_BLOCK);
             tree_set_ident(b, tree_ident(t));
-            for (unsigned i = 0; i < tree_else_stmts(t); i++)
+            for (i = 0; i < tree_else_stmts(t); i++)
                tree_add_stmt(b, tree_else_stmt(t, i));
             return b;
          }
@@ -476,22 +517,27 @@ static tree_t simp_while(tree_t t)
 
 static tree_t simp_for(tree_t t)
 {
-   tree_t b = tree_new(T_BLOCK);
+   unsigned i;
+   tree_t b, decl, var, test, container, init, wh, cmp, exit, next, asc, succ, a1, pred, a2;
+   range_t r;
+   param_t p;
+
+   b = tree_new(T_BLOCK);
    tree_set_ident(b, tree_ident(t));
 
-   for (unsigned i = 0; i < tree_decls(t); i++)
+   for (i = 0; i < tree_decls(t); i++)
       tree_add_decl(b, tree_decl(t, i));
 
-   tree_t decl = tree_decl(t, 0);
+   decl = tree_decl(t, 0);
 
-   tree_t var = tree_new(T_REF);
+   var = tree_new(T_REF);
    tree_set_ident(var, tree_ident(decl));
    tree_set_type(var, tree_type(decl));
    tree_set_ref(var, decl);
 
-   range_t r = tree_range(t);
+   r = tree_range(t);
 
-   tree_t test = NULL;
+   test = NULL;
    switch (r.kind) {
    case RANGE_TO:
       test = call_builtin("leq", NULL, r.left, r.right, NULL);
@@ -505,7 +551,7 @@ static tree_t simp_for(tree_t t)
       assert(false);
    }
 
-   tree_t container = b;
+   container = b;
    if (test != NULL) {
       container = tree_new(T_IF);
       tree_set_ident(container, ident_uniq("null_check"));
@@ -514,43 +560,42 @@ static tree_t simp_for(tree_t t)
       tree_add_stmt(b, container);
    }
 
-   tree_t init = tree_new(T_VAR_ASSIGN);
+   init = tree_new(T_VAR_ASSIGN);
    tree_set_ident(init, ident_uniq("init"));
    tree_set_target(init, var);
    tree_set_value(init, r.left);
 
-   tree_t wh = tree_new(T_WHILE);
+   wh = tree_new(T_WHILE);
    tree_set_ident(wh, ident_uniq("loop"));
 
-   for (unsigned i = 0; i < tree_stmts(t); i++)
+   for (i = 0; i < tree_stmts(t); i++)
       tree_add_stmt(wh, tree_stmt(t, i));
 
-   tree_t cmp = call_builtin("eq", NULL, var, r.right, NULL);
+   cmp = call_builtin("eq", NULL, var, r.right, NULL);
 
-   tree_t exit = tree_new(T_EXIT);
+   exit = tree_new(T_EXIT);
    tree_set_ident(exit, ident_uniq("for_exit"));
    tree_set_value(exit, cmp);
 
-   tree_t next;
    if (r.kind == RANGE_DYN) {
       assert(tree_kind(r.left) == T_FCALL);
-      param_t p = tree_param(r.left, 0);
+      p = tree_param(r.left, 0);
 
-      tree_t asc = call_builtin("uarray_asc", NULL, p.value, NULL);
+      asc = call_builtin("uarray_asc", NULL, p.value, NULL);
       next = tree_new(T_IF);
       tree_set_value(next, asc);
       tree_set_ident(next, ident_uniq("for_next"));
 
-      tree_t succ = call_builtin("succ", tree_type(decl), var, NULL);
+      succ = call_builtin("succ", tree_type(decl), var, NULL);
 
-      tree_t a1 = tree_new(T_VAR_ASSIGN);
+      a1 = tree_new(T_VAR_ASSIGN);
       tree_set_ident(a1, ident_uniq("for_next_asc"));
       tree_set_target(a1, var);
       tree_set_value(a1, succ);
 
-      tree_t pred = call_builtin("pred", tree_type(decl), var, NULL);
+      pred = call_builtin("pred", tree_type(decl), var, NULL);
 
-      tree_t a2 = tree_new(T_VAR_ASSIGN);
+      a2 = tree_new(T_VAR_ASSIGN);
       tree_set_ident(a2, ident_uniq("for_next_dsc"));
       tree_set_target(a2, var);
       tree_set_value(a2, pred);
@@ -588,6 +633,8 @@ static tree_t simp_for(tree_t t)
 
 static void simp_build_wait(tree_t ref, void *context)
 {
+   unsigned i;
+
    // Add each signal referenced in an expression to the trigger
    // list for a wait statement
 
@@ -597,7 +644,7 @@ static void simp_build_wait(tree_t ref, void *context)
    tree_kind_t kind = tree_kind(decl);
    if (kind == T_SIGNAL_DECL || kind == T_PORT_DECL) {
       // Check for duplicates
-      for (unsigned i = 0; i < tree_triggers(wait); i++) {
+      for (i = 0; i < tree_triggers(wait); i++) {
          if (tree_ref(tree_trigger(wait, i)) == decl)
             return;
       }
@@ -608,18 +655,22 @@ static void simp_build_wait(tree_t ref, void *context)
 
 static tree_t simp_cassign(tree_t t)
 {
+   tree_t p, w, container, s;
+   void (*add_stmt)(tree_t, tree_t);
+   unsigned i, j;
+
    // Replace concurrent assignments with a process
 
-   tree_t p = tree_new(T_PROCESS);
+   p = tree_new(T_PROCESS);
    tree_set_ident(p, tree_ident(t));
 
-   tree_t w = tree_new(T_WAIT);
+   w = tree_new(T_WAIT);
    tree_set_ident(w, ident_new("cassign"));
 
-   tree_t container = p;  // Where to add new statements
-   void (*add_stmt)(tree_t, tree_t) = tree_add_stmt;
+   container = p;  // Where to add new statements
+   add_stmt  = tree_add_stmt;
 
-   for (unsigned i = 0; i < tree_conds(t); i++) {
+   for (i = 0; i < tree_conds(t); i++) {
       tree_t c = tree_cond(t, i);
 
       if (tree_has_value(c)) {
@@ -636,13 +687,13 @@ static tree_t simp_cassign(tree_t t)
          add_stmt  = tree_add_stmt;
       }
 
-      tree_t s = tree_new(T_SIGNAL_ASSIGN);
+      s = tree_new(T_SIGNAL_ASSIGN);
       tree_set_loc(s, tree_loc(t));
       tree_set_target(s, tree_target(t));
       tree_set_ident(s, tree_ident(t));
 
-      for (unsigned i = 0; i < tree_waveforms(c); i++) {
-         tree_t wave = tree_waveform(c, i);
+      for (j = 0; j < tree_waveforms(c); j++) {
+         tree_t wave = tree_waveform(c, j);
          tree_add_waveform(s, wave);
          tree_visit_only(wave, simp_build_wait, w, T_REF);
       }
@@ -671,20 +722,24 @@ static tree_t simp_check_bounds(tree_t i, int64_t low, int64_t high)
 
 static tree_t simp_aggregate(tree_t t)
 {
-   type_t type = tree_type(t);
+   type_t type;
+   range_t r;
+   int64_t low, high;
+   unsigned i;
+
+   type = tree_type(t);
    if (type_kind(type) != T_CARRAY)
       return t;
 
-   range_t r = type_dim(type, 0);
+   r = type_dim(type, 0);
    if (tree_kind(r.left) != T_LITERAL || tree_kind(r.right) != T_LITERAL)
       return t;
 
    // Check for out of bounds indexes
 
-   int64_t low, high;
    range_bounds(type_dim(type, 0), &low, &high);
 
-   for (unsigned i = 0; i < tree_assocs(t); i++) {
+   for (i = 0; i < tree_assocs(t); i++) {
       assoc_t a = tree_assoc(t, i);
 
       switch (a.kind) {
@@ -709,29 +764,33 @@ static tree_t simp_aggregate(tree_t t)
 
 static tree_t simp_select(tree_t t)
 {
+   tree_t p, w, c;
+   unsigned i, j;
+   assoc_t a;
+
    // Replace a select statement with a case inside a process
 
-   tree_t p = tree_new(T_PROCESS);
+   p = tree_new(T_PROCESS);
    tree_set_ident(p, tree_ident(t));
 
-   tree_t w = tree_new(T_WAIT);
+   w = tree_new(T_WAIT);
    tree_set_ident(w, ident_new("select_wait"));
 
-   tree_t c = tree_new(T_CASE);
+   c = tree_new(T_CASE);
    tree_set_ident(c, ident_new("select_case"));
    tree_set_loc(c, tree_loc(t));
    tree_set_value(c, tree_value(t));
 
    tree_visit_only(tree_value(t), simp_build_wait, w, T_REF);
 
-   for (unsigned i = 0; i < tree_assocs(t); i++) {
-      assoc_t a = tree_assoc(t, i);
+   for (i = 0; i < tree_assocs(t); i++) {
+      a = tree_assoc(t, i);
       tree_add_assoc(c, a);
 
       if (a.kind == A_NAMED)
          tree_visit_only(a.name, simp_build_wait, w, T_REF);
 
-      for (unsigned j = 0; j < tree_waveforms(a.value); j++)
+      for (j = 0; j < tree_waveforms(a.value); j++)
          tree_visit_only(tree_waveform(a.value, j), simp_build_wait, w, T_REF);
    }
 

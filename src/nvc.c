@@ -48,28 +48,36 @@ static void set_work_lib(void)
 
 static ident_t to_unit_name(const char *str)
 {
-   char *name = strdup(str);
-   for (char *p = name; *p; p++)
+   char *name;
+   char *p;
+   ident_t i;
+
+   name = strdup(str);
+   for (p = name; *p; p++)
       *p = toupper((uint8_t)*p);
 
-   ident_t i = ident_prefix(lib_name(lib_work()),
-                            ident_new(name), '.');
+   i = ident_prefix(lib_name(lib_work()),
+                    ident_new(name), '.');
    free(name);
    return i;
 }
 
 static int analyse(int argc, char **argv)
 {
-   set_work_lib();
-
    static struct option long_options[] = {
       {"bootstrap", no_argument, 0, 'b'},
       {"dump-llvm", no_argument, 0, 'd'},
       {0, 0, 0, 0}
    };
-
    int c, index = 0;
    const char *spec = "";
+   tree_t to_cgen[16];
+   int n_cgen = 0;
+   int i;
+   tree_t unit;
+
+   set_work_lib();
+
    optind = 1;
    while ((c = getopt_long(argc, argv, spec, long_options, &index)) != -1) {
       switch (c) {
@@ -90,14 +98,10 @@ static int analyse(int argc, char **argv)
       }
    }
 
-   tree_t to_cgen[16];
-   int n_cgen = 0;
-
-   for (int i = optind; i < argc; i++) {
+   for (i = optind; i < argc; i++) {
       if (!input_from_file(argv[i]))
          return EXIT_FAILURE;
 
-      tree_t unit;
       while ((unit = parse())) {
          if (sem_check(unit)) {
             assert(sem_errors() == 0);
@@ -121,7 +125,7 @@ static int analyse(int argc, char **argv)
       lib_save(lib_work());
    }
 
-   for (int i = 0; i < n_cgen; i++)
+   for (i = 0; i < n_cgen; i++)
       cgen(to_cgen[i]);
 
    return EXIT_SUCCESS;
@@ -129,17 +133,19 @@ static int analyse(int argc, char **argv)
 
 static int elaborate(int argc, char **argv)
 {
-   set_work_lib();
-
    static struct option long_options[] = {
       {"disable-opt", no_argument, 0, 'o'},
       {"dump-llvm", no_argument, 0, 'd'},
       {"native", no_argument, 0, 'n'},
       {0, 0, 0, 0}
    };
-
    int c, index = 0;
    const char *spec = "";
+   ident_t unit_i;
+   tree_t unit, e;
+
+   set_work_lib();
+
    optind = 1;
    while ((c = getopt_long(argc, argv, spec, long_options, &index)) != -1) {
       switch (c) {
@@ -166,13 +172,13 @@ static int elaborate(int argc, char **argv)
    if (optind == argc)
       fatal("missing top-level unit name");
 
-   ident_t unit_i = to_unit_name(argv[optind]);
-   tree_t unit = lib_get(lib_work(), unit_i);
+   unit_i = to_unit_name(argv[optind]);
+   unit = lib_get(lib_work(), unit_i);
    if (unit == NULL)
       fatal("cannot find unit %s in library %s",
             istr(unit_i), istr(lib_name(lib_work())));
 
-   tree_t e = elab(unit);
+   e = elab(unit);
    if (e == NULL)
       return EXIT_FAILURE;
 
@@ -217,8 +223,6 @@ static uint64_t parse_time(const char *str)
 
 static int run(int argc, char **argv)
 {
-   set_work_lib();
-
    static struct option long_options[] = {
       {"trace", no_argument, 0, 't'},
 #if defined HAVE_TCL_TCL_H || defined HAVE_TCL_H
@@ -230,16 +234,19 @@ static int run(int argc, char **argv)
       {"stats", no_argument, 0, 'S'},
       {0, 0, 0, 0}
    };
-
 #if defined HAVE_TCL_TCL_H || defined HAVE_TCL_H
    enum { BATCH, COMMAND } mode = BATCH;
 #endif
-
    uint64_t stop_time = UINT64_MAX;
    const char *vcd_fname = NULL;
-
    int c, index = 0;
    const char *spec = "bc";
+   ident_t top, ename;
+   tree_t e;
+   tree_rd_ctx_t ctx;
+
+   set_work_lib();
+
    optind = 1;
    while ((c = getopt_long(argc, argv, spec, long_options, &index)) != -1) {
       switch (c) {
@@ -277,10 +284,9 @@ static int run(int argc, char **argv)
    if (optind == argc)
       fatal("missing top-level unit name");
 
-   ident_t top = to_unit_name(argv[optind]);
-   ident_t ename = ident_prefix(top, ident_new("elab"), '.');
-   tree_rd_ctx_t ctx;
-   tree_t e = lib_get_ctx(lib_work(), ename, &ctx);
+   top = to_unit_name(argv[optind]);
+   ename = ident_prefix(top, ident_new("elab"), '.');
+   e = lib_get_ctx(lib_work(), ename, &ctx);
    if (e == NULL)
       fatal("%s not elaborated", istr(top));
    else if (tree_kind(e) != T_ELAB)
@@ -309,17 +315,20 @@ static int run(int argc, char **argv)
 
 static int dump_cmd(int argc, char **argv)
 {
-   set_work_lib();
-
    static struct option long_options[] = {
       {"elab", no_argument, 0, 'e'},
       {"body", no_argument, 0, 'b'},
       {0, 0, 0, 0}
    };
-
    bool add_elab = false, add_body = false;
    int c, index = 0;
    const char *spec = "eb";
+   int i;
+   ident_t name;
+   tree_t top;
+
+   set_work_lib();
+
    optind = 1;
    while ((c = getopt_long(argc, argv, spec, long_options, &index)) != -1) {
       switch (c) {
@@ -343,13 +352,13 @@ static int dump_cmd(int argc, char **argv)
    if (optind == argc)
       fatal("missing unit name");
 
-   for (int i = optind; i < argc; i++) {
-      ident_t name = to_unit_name(argv[i]);
+   for (i = optind; i < argc; i++) {
+      name = to_unit_name(argv[i]);
       if (add_elab)
          name = ident_prefix(name, ident_new("elab"), '.');
       else if (add_body)
          name = ident_prefix(name, ident_new("body"), '-');
-      tree_t top = lib_get(lib_work(), name);
+      top = lib_get(lib_work(), name);
       if (top == NULL)
          fatal("%s not analysed", istr(name));
       dump(top);
@@ -432,10 +441,6 @@ static void version(void)
 
 int main(int argc, char **argv)
 {
-   term_init();
-   register_trace_signal_handlers();
-   set_default_opts();
-
    static struct option long_options[] = {
       {"help",    no_argument,       0, 'h'},
       {"version", no_argument,       0, 'v'},
@@ -443,9 +448,13 @@ int main(int argc, char **argv)
       {"dump",    no_argument,       0, 'd'},
       {0, 0, 0, 0}
    };
-
    int c, index = 0;
    const char *spec = "aehr";
+
+   term_init();
+   register_trace_signal_handlers();
+   set_default_opts();
+
    while ((c = getopt_long(argc, argv, spec, long_options, &index)) != -1) {
       switch (c) {
       case 0:

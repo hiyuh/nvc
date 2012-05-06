@@ -127,6 +127,11 @@ type_kind_t type_kind(type_t t)
 
 bool type_eq(type_t a, type_t b)
 {
+   bool compare_c_u_arrays;
+   type_t universal_int;
+   ident_t uint_i;
+   unsigned i;
+
    assert(a != NULL);
    assert(b != NULL);
 
@@ -142,7 +147,7 @@ bool type_eq(type_t a, type_t b)
    while (type_kind(b) == T_SUBTYPE)
       b = type_base(b);
 
-   const bool compare_c_u_arrays =
+   compare_c_u_arrays =
       (type_kind(a) == T_CARRAY && type_kind(b) == T_UARRAY)
       || (type_kind(a) == T_UARRAY && type_kind(b) == T_CARRAY);
 
@@ -150,8 +155,8 @@ bool type_eq(type_t a, type_t b)
       return false;
 
    // Universal integer type is equal to any other integer type
-   type_t universal_int = type_universal_int();
-   ident_t uint_i = type_ident(universal_int);
+   universal_int = type_universal_int();
+   uint_i = type_ident(universal_int);
    if (type_kind(a) == T_INTEGER
        && (type_ident(a) == uint_i || type_ident(b) == uint_i))
       return true;
@@ -178,7 +183,7 @@ bool type_eq(type_t a, type_t b)
       if (type_params(a) != type_params(b))
          return false;
 
-      for (unsigned i = 0; i < type_params(a); i++) {
+      for (i = 0; i < type_params(a); i++) {
          if (!type_eq(type_param(a, i), type_param(b, i)))
              return false;
       }
@@ -297,24 +302,30 @@ void type_set_elem(type_t t, type_t e)
 type_t type_universal_int(void)
 {
    static type_t t = NULL;
+   tree_t left, right;
+   literal_t l_min;
+   literal_t l_max;
+   range_t r;
 
    if (t == NULL) {
       t = type_new(T_INTEGER);
       type_set_ident(t, ident_new("universal integer"));
 
-      tree_t left = tree_new(T_LITERAL);
-      literal_t l_min = { { .i = INT_MIN }, .kind = L_INT };
+      left = tree_new(T_LITERAL);
+      l_min.i = INT_MIN;
+      l_min.kind = L_INT;
       tree_set_literal(left, l_min);
       tree_set_type(left, t);
 
-      tree_t right = tree_new(T_LITERAL);
-      literal_t l_max = { { .i = INT_MAX }, .kind = L_INT };
+      right = tree_new(T_LITERAL);
+      l_max.i = INT_MAX;
+      l_max.kind = L_INT;
       tree_set_literal(right, l_max);
       tree_set_type(right, t);
 
-      range_t r = { .kind  = RANGE_TO,
-                    .left  = left,
-                    .right = right };
+      r.kind  = RANGE_TO;
+      r.left  = left;
+      r.right = right;
       type_add_dim(t, r);
    }
 
@@ -449,6 +460,7 @@ void type_set_result(type_t t, type_t r)
 
 void type_replace(type_t t, type_t a)
 {
+   unsigned i;
    assert(t != NULL);
    assert(IS(t, T_INCOMPLETE));
 
@@ -456,13 +468,13 @@ void type_replace(type_t t, type_t a)
    t->ident = a->ident;
 
    if (HAS_DIMS(a)) {
-      for (unsigned i = 0; i < a->n_dims; i++)
+      for (i = 0; i < a->n_dims; i++)
          type_add_dim(t, type_dim(a, i));
    }
 
    switch (a->kind) {
    case T_UARRAY:
-      for (unsigned i = 0; i < type_index_constrs(a); i++)
+      for (i = 0; i < type_index_constrs(a); i++)
          type_add_index_constr(t, type_index_constr(a, i));
 
       // Fall-through
@@ -482,7 +494,7 @@ void type_replace(type_t t, type_t a)
       break;
 
    case T_ENUM:
-      for (unsigned i = 0; i < type_enum_literals(a); i++)
+      for (i = 0; i < type_enum_literals(a); i++)
          type_enum_add_literal(t, type_enum_literal(a, i));
       break;
 
@@ -588,6 +600,7 @@ void type_set_file(type_t t, type_t f)
 
 void type_write(type_t t, type_wr_ctx_t ctx)
 {
+   unsigned i;
    FILE *f = tree_write_file(ctx->tree_ctx);
 
    if (t == NULL) {
@@ -609,7 +622,7 @@ void type_write(type_t t, type_wr_ctx_t ctx)
    ident_write(t->ident, ctx->ident_ctx);
    if (HAS_DIMS(t)) {
       write_u16(t->n_dims, f);
-      for (unsigned i = 0; i < t->n_dims; i++) {
+      for (i = 0; i < t->n_dims; i++) {
          write_u16(t->dims[i].kind, f);
          tree_write(t->dims[i].left, ctx->tree_ctx);
          tree_write(t->dims[i].right, ctx->tree_ctx);
@@ -617,7 +630,7 @@ void type_write(type_t t, type_wr_ctx_t ctx)
    }
    if (HAS_PARAMS(t)) {
       write_u16(t->n_params, f);
-      for (unsigned i = 0; i < t->n_params; i++)
+      for (i = 0; i < t->n_params; i++)
          type_write(t->params[i], ctx);
    }
    if (HAS_BASE(t)) {
@@ -631,21 +644,21 @@ void type_write(type_t t, type_wr_ctx_t ctx)
 
    if (IS(t, T_PHYSICAL)) {
       write_u16(t->n_units, f);
-      for (unsigned i = 0; i < t->n_units; i++) {
+      for (i = 0; i < t->n_units; i++) {
          tree_write(t->units[i].multiplier, ctx->tree_ctx);
          ident_write(t->units[i].name, ctx->ident_ctx);
       }
    }
    else if (IS(t, T_ENUM)) {
       write_u16(t->n_literals, f);
-      for (unsigned i = 0; i < t->n_literals; i++)
+      for (i = 0; i < t->n_literals; i++)
          tree_write(t->literals[i], ctx->tree_ctx);
    }
    else if (IS(t, T_FUNC))
       type_write(t->result, ctx);
    else if (IS(t, T_UARRAY)) {
       write_u16(t->n_index_constr, f);
-      for (unsigned i = 0; i < t->n_index_constr; i++)
+      for (i = 0; i < t->n_index_constr; i++)
          type_write(t->index_constr[i], ctx);
    }
    else if (IS(t, T_ACCESS))
@@ -656,6 +669,8 @@ void type_write(type_t t, type_wr_ctx_t ctx)
 
 type_t type_read(type_rd_ctx_t ctx)
 {
+   type_t t;
+   unsigned i;
    FILE *f = tree_read_file(ctx->tree_ctx);
 
    unsigned short marker = read_u16(f);
@@ -670,7 +685,7 @@ type_t type_read(type_rd_ctx_t ctx)
 
    assert(marker < T_LAST_TYPE_KIND);
 
-   type_t t = type_new((type_kind_t)marker);
+   t = type_new((type_kind_t)marker);
    t->ident = ident_read(ctx->ident_ctx);
 
    // Stash pointer for later back references
@@ -687,7 +702,7 @@ type_t type_read(type_rd_ctx_t ctx)
       assert(ndims < MAX_DIMS);
       t->dims = xmalloc(sizeof(range_t) * MAX_DIMS);
 
-      for (unsigned i = 0; i < ndims; i++) {
+      for (i = 0; i < ndims; i++) {
          t->dims[i].kind  = read_u16(f);
          t->dims[i].left  = tree_read(ctx->tree_ctx);
          t->dims[i].right = tree_read(ctx->tree_ctx);
@@ -708,7 +723,7 @@ type_t type_read(type_rd_ctx_t ctx)
       t->params = xmalloc(nparams * sizeof(type_t));
       t->params_alloc = nparams;
 
-      for (unsigned i = 0; i < nparams; i++)
+      for (i = 0; i < nparams; i++)
          t->params[i] = type_read(ctx);
       t->n_params = nparams;
    }
@@ -719,7 +734,7 @@ type_t type_read(type_rd_ctx_t ctx)
 
       t->units = xmalloc(MAX_UNITS * sizeof(unit_t));
 
-      for (unsigned i = 0; i < nunits; i++) {
+      for (i = 0; i < nunits; i++) {
          t->units[i].multiplier = tree_read(ctx->tree_ctx);
          t->units[i].name = ident_read(ctx->ident_ctx);
       }
@@ -731,7 +746,7 @@ type_t type_read(type_rd_ctx_t ctx)
       t->literals = xmalloc(nlits * sizeof(tree_t));
       t->lit_alloc = nlits;
 
-      for (unsigned i = 0; i < nlits; i++) {
+      for (i = 0; i < nlits; i++) {
          t->literals[i] = tree_read(ctx->tree_ctx);
       }
       t->n_literals = nlits;
@@ -742,7 +757,7 @@ type_t type_read(type_rd_ctx_t ctx)
       unsigned short nconstr = read_u16(f);
       assert(nconstr < MAX_DIMS);
 
-      for (unsigned i = 0; i < nconstr; i++)
+      for (i = 0; i < nconstr; i++)
          t->index_constr[i] = type_read(ctx);
       t->n_index_constr = nconstr;
    }
@@ -792,6 +807,7 @@ void type_read_end(type_rd_ctx_t ctx)
 
 const char *type_pp(type_t t)
 {
+   unsigned i;
    assert(t != NULL);
 
    switch (type_kind(t)) {
@@ -803,7 +819,7 @@ const char *type_pp(type_t t)
          const char *fname = istr(type_ident(t));
 
          p += snprintf(p, end - p, "%s(", fname);
-         for (unsigned i = 0; i < type_params(t); i++)
+         for (i = 0; i < type_params(t); i++)
             p += snprintf(p, end - p, "%s%s",
                           (i == 0 ? "" : ", "),
                           istr(type_ident(type_param(t, i))));
@@ -830,7 +846,9 @@ bool type_update_generation(type_t t, unsigned generation)
 
 void type_sweep(unsigned generation)
 {
-   for (unsigned i = 0; i < n_types_alloc; i++) {
+   unsigned i;
+   size_t p;
+   for (i = 0; i < n_types_alloc; i++) {
       type_t t = all_types[i];
       if (t->generation < generation) {
          if (IS(t, T_PHYSICAL) && t->units != NULL)
@@ -850,8 +868,8 @@ void type_sweep(unsigned generation)
    }
 
    // Compact
-   size_t p = 0;
-   for (unsigned i = 0; i < n_types_alloc; i++) {
+   p = 0;
+   for (i = 0; i < n_types_alloc; i++) {
       if (all_types[i] != NULL)
          all_types[p++] = all_types[i];
    }

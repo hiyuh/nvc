@@ -22,6 +22,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdarg.h>
+#include <stdlib.h>
 
 static void elab_arch(tree_t t, tree_t out, ident_t path);
 static void elab_block(tree_t t, tree_t out, ident_t path);
@@ -30,12 +31,14 @@ static ident_t hpathf(ident_t path, char sep, const char *fmt, ...)
 {
    va_list ap;
    char buf[256];
+   char *p;
+
    va_start(ap, fmt);
    vsnprintf(buf, sizeof(buf), fmt, ap);
    va_end(ap);
 
    // LRM specifies instance path is lowercase
-   char *p = buf;
+   p = buf;
    while (*p != '\0') {
       *p = tolower((uint8_t)*p);
       ++p;
@@ -46,9 +49,12 @@ static ident_t hpathf(ident_t path, char sep, const char *fmt, ...)
 
 static const char *simple_name(const char *full)
 {
+   const char *start;
+   const char *p;
+
    // Strip off any library or entity prefix from the parameter
-   const char *start = full;
-   for (const char *p = full; *p != '\0'; p++) {
+   start = full;
+   for (p = full; *p != '\0'; p++) {
       if (*p == '.' || *p == '-')
          start = p + 1;
    }
@@ -93,13 +99,17 @@ static void find_arch(tree_t t, void *context)
 
 static tree_t pick_arch(const loc_t *loc, ident_t name)
 {
+   tree_t arch;
+   struct arch_search_params params;
+
    // When an explicit architecture name is not given select the most
    // recently analysed architecture of this entity
 
-   tree_t arch = lib_get(lib_work(), name);
+   arch = lib_get(lib_work(), name);
    if ((arch == NULL) || (tree_kind(arch) != T_ARCH)) {
       arch = NULL;
-      struct arch_search_params params = { name, &arch };
+      params.name = name;
+      params.arch = &arch;
       lib_foreach(lib_work(), find_arch, &params);
 
       if (arch == NULL)
@@ -155,7 +165,8 @@ static void elab_add_alias(tree_t arch, tree_t decl, ident_t ident)
 
 static void elab_copy_context(tree_t dest, tree_t src)
 {
-   for (unsigned i = 0; i < tree_contexts(src); i++)
+   unsigned i;
+   for (i = 0; i < tree_contexts(src); i++)
       tree_add_context(dest, tree_context(src, i));
 }
 
@@ -179,16 +190,24 @@ static void elab_map(tree_t t, tree_t arch,
                      tree_formals_t tree_Fs, tree_formal_t tree_F,
                      tree_actuals_t tree_As, tree_actual_t tree_A)
 {
-   tree_t unit = tree_ref(t);
+   tree_t unit;
+   bool *have_formals;
+   unsigned i, j;
+   param_t p;
+   tree_t formal, port;
+   struct rewrite_params params;
+   tree_t f;
+
+   unit = tree_ref(t);
    assert(tree_kind(unit) == T_ENTITY);
 
-   bool have_formals[tree_Fs(unit)];
-   for (unsigned i = 0; i < tree_Fs(unit); i++)
+   have_formals = (bool *)xmalloc(tree_Fs(unit) * sizeof(bool));
+   for (i = 0; i < tree_Fs(unit); i++)
       have_formals[i] = false;
 
-   for (unsigned i = 0; i < tree_As(t); i++) {
-      param_t p = tree_A(t, i);
-      tree_t formal = NULL;
+   for (i = 0; i < tree_As(t); i++) {
+      p = tree_A(t, i);
+      formal = NULL;
 
       switch (p.kind) {
       case P_POS:
@@ -196,8 +215,8 @@ static void elab_map(tree_t t, tree_t arch,
          have_formals[p.pos] = true;
          break;
       case P_NAMED:
-         for (unsigned j = 0; j < tree_Fs(unit); j++) {
-            tree_t port = tree_F(unit, j);
+         for (j = 0; j < tree_Fs(unit); j++) {
+            port = tree_F(unit, j);
             if (tree_ident(port) == p.name) {
                formal = port;
                have_formals[j] = true;
@@ -210,10 +229,8 @@ static void elab_map(tree_t t, tree_t arch,
       }
       assert(formal != NULL);
 
-      struct rewrite_params params = {
-         .formal = formal,
-         .actual = NULL
-      };
+      params.formal = formal;
+      params.actual = NULL;
 
       switch (tree_class(formal)) {
       case C_SIGNAL:
@@ -232,18 +249,18 @@ static void elab_map(tree_t t, tree_t arch,
    }
 
    // Assign default values
-   for (unsigned i = 0; i < tree_Fs(unit); i++) {
+   for (i = 0; i < tree_Fs(unit); i++) {
       if (!have_formals[i]) {
-         tree_t f = tree_F(unit, i);
+         f = tree_F(unit, i);
          assert(tree_has_value(f));
 
-         struct rewrite_params params = {
-            .formal = f,
-            .actual = tree_value(f)
-         };
+         params.formal = f;
+         params.actual = tree_value(f);
          tree_rewrite(arch, rewrite_ports, &params);
       }
    }
+
+   free(have_formals);
 }
 
 static void elab_instance(tree_t t, tree_t out, ident_t path)
@@ -267,7 +284,8 @@ static void elab_instance(tree_t t, tree_t out, ident_t path)
 
 static void elab_decls(tree_t t, tree_t out, ident_t path)
 {
-   for (unsigned i = 0; i < tree_decls(t); i++) {
+   unsigned i;
+   for (i = 0; i < tree_decls(t); i++) {
       tree_t d = tree_decl(t, i);
       ident_t pn = hpathf(path, ':', "%s",
                           simple_name(istr(tree_ident(d))));
@@ -298,7 +316,8 @@ static void elab_decls(tree_t t, tree_t out, ident_t path)
 
 static void elab_stmts(tree_t t, tree_t out, ident_t path)
 {
-   for (unsigned i = 0; i < tree_stmts(t); i++) {
+   unsigned i;
+   for (i = 0; i < tree_stmts(t); i++) {
       tree_t s = tree_stmt(t, i);
       ident_t npath = hpathf(path, ':', "%s", istr(tree_ident(s)));
       tree_set_ident(s, npath);
@@ -331,16 +350,19 @@ static void elab_arch(tree_t t, tree_t out, ident_t path)
 
 static void elab_entity(tree_t t, tree_t out, ident_t path)
 {
+   tree_t arch;
+   ident_t new_path;
+
    if (tree_ports(t) > 0 || tree_generics(t) > 0) {
       // LRM 93 section 12.1 says implementation may allow this but
       // is not required to
       fatal("top-level entity may not have generics or ports");
    }
 
-   tree_t arch = pick_arch(NULL, tree_ident(t));
-   ident_t new_path = hpathf(path, ':', ":%s(%s)",
-                             simple_name(istr(tree_ident(t))),
-                             simple_name(istr(tree_ident(arch))));
+   arch = pick_arch(NULL, tree_ident(t));
+   new_path = hpathf(path, ':', ":%s(%s)",
+                     simple_name(istr(tree_ident(t))),
+                     simple_name(istr(tree_ident(arch))));
 
    elab_copy_context(out, t);
    elab_arch(arch, out, new_path);
@@ -348,9 +370,11 @@ static void elab_entity(tree_t t, tree_t out, ident_t path)
 
 tree_t elab(tree_t top)
 {
+   tree_t e;
+
    lib_load_all(lib_work());
 
-   tree_t e = tree_new(T_ELAB);
+   e = tree_new(T_ELAB);
    tree_set_ident(e, ident_prefix(tree_ident(top),
                                   ident_new("elab"), '.'));
 

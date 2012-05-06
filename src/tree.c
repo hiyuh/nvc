@@ -283,9 +283,10 @@ static void param_array_add(struct param_array *a, param_t p)
 
 tree_t tree_new(tree_kind_t kind)
 {
+   tree_t t;
    assert(kind < T_LAST_TREE_KIND);
 
-   tree_t t = xmalloc(sizeof(struct tree));
+   t = xmalloc(sizeof(struct tree));
    memset(t, '\0', sizeof(struct tree));
    t->kind  = kind;
    t->index = UINT32_MAX;
@@ -303,11 +304,14 @@ tree_t tree_new(tree_kind_t kind)
 
 void tree_gc(void)
 {
+   unsigned i;
+   size_t p;
+
    // Generation will be updated by tree_visit
    const unsigned base_gen = next_generation;
 
    // Mark
-   for (unsigned i = 0; i < n_trees_alloc; i++) {
+   for (i = 0; i < n_trees_alloc; i++) {
       assert(all_trees[i] != NULL);
 
       if (IS_TOP_LEVEL(all_trees[i]))
@@ -318,7 +322,7 @@ void tree_gc(void)
    }
 
    // Sweep
-   for (unsigned i = 0; i < n_trees_alloc; i++) {
+   for (i = 0; i < n_trees_alloc; i++) {
       tree_t t = all_trees[i];
       if (t->generation < base_gen) {
          if (HAS_PORTS(t) && t->ports.items != NULL)
@@ -347,8 +351,8 @@ void tree_gc(void)
    }
 
    // Compact
-   size_t p = 0;
-   for (unsigned i = 0; i < n_trees_alloc; i++) {
+   p = 0;
+   for (i = 0; i < n_trees_alloc; i++) {
       if (all_trees[i] != NULL)
          all_trees[p++] = all_trees[i];
    }
@@ -929,11 +933,12 @@ context_t tree_context(tree_t t, unsigned n)
 
 void tree_add_context(tree_t t, context_t ctx)
 {
+   unsigned i;
    assert(t != NULL);
    assert(HAS_CONTEXT(t));
    assert(t->n_contexts < MAX_CONTEXTS);
 
-   for (unsigned i = 0; i < tree_contexts(t); i++) {
+   for (i = 0; i < tree_contexts(t); i++) {
       if (t->context[i].name == ctx.name)
          return;
    }
@@ -972,6 +977,7 @@ void tree_change_assoc(tree_t t, unsigned i, assoc_t a)
 
 void tree_add_assoc(tree_t t, assoc_t a)
 {
+   unsigned i;
    assert(t != NULL);
    assert(HAS_ASSOCS(t));
 
@@ -986,7 +992,7 @@ void tree_add_assoc(tree_t t, assoc_t a)
 
    if (a.kind == A_POS) {
       unsigned pos = 0;
-      for (unsigned i = 0; i < t->n_assocs; i++) {
+      for (i = 0; i < t->n_assocs; i++) {
          if (t->assocs[i].kind == A_POS)
             pos++;
       }
@@ -1129,8 +1135,9 @@ static unsigned tree_visit_a(struct tree_array *a,
                              tree_kind_t kind, unsigned generation,
                              bool deep)
 {
+   unsigned i;
    unsigned n = 0;
-   for (unsigned i = 0; i < a->count; i++)
+   for (i = 0; i < a->count; i++)
       n += tree_visit_aux(a->items[i], fn, context, kind,
                           generation, deep);
 
@@ -1142,8 +1149,9 @@ static unsigned tree_visit_p(struct param_array *a,
                              tree_kind_t kind, unsigned generation,
                              bool deep)
 {
+   unsigned i;
    unsigned n = 0;
-   for (unsigned i = 0; i < a->count; i++) {
+   for (i = 0; i < a->count; i++) {
       switch (a->items[i].kind) {
       case P_RANGE:
          n += tree_visit_aux(a->items[i].range.left,
@@ -1168,20 +1176,21 @@ static unsigned tree_visit_type(type_t type,
                                 tree_kind_t kind, unsigned generation,
                                 bool deep)
 {
+   unsigned i;
+   unsigned n = 0;
+
    if (type == NULL)
       return 0;
 
    if (!type_update_generation(type, generation))
       return 0;
 
-   unsigned n = 0;
-
    switch (type_kind(type)) {
    case T_SUBTYPE:
    case T_INTEGER:
    case T_PHYSICAL:
    case T_CARRAY:
-      for (unsigned i = 0; i < type_dims(type); i++) {
+      for (i = 0; i < type_dims(type); i++) {
          range_t r = type_dim(type, i);
          n += tree_visit_aux(r.left, fn, context, kind,
                              generation, deep);
@@ -1220,13 +1229,13 @@ static unsigned tree_visit_type(type_t type,
       break;
 
    case T_PHYSICAL:
-      for (unsigned i = 0; i < type_units(type); i++)
+      for (i = 0; i < type_units(type); i++)
          n += tree_visit_aux(type_unit(type, i).multiplier, fn, context,
                              kind, generation, deep);
       break;
 
    case T_FUNC:
-      for (unsigned i = 0; i < type_params(type); i++)
+      for (i = 0; i < type_params(type); i++)
          n += tree_visit_type(type_param(type, i), fn, context,
                               kind, generation, deep);
       n += tree_visit_type(type_result(type), fn, context,
@@ -1234,13 +1243,13 @@ static unsigned tree_visit_type(type_t type,
       break;
 
    case T_ENUM:
-      for (unsigned i = 0; i < type_enum_literals(type); i++)
+      for (i = 0; i < type_enum_literals(type); i++)
          n += tree_visit_aux(type_enum_literal(type, i), fn, context,
                              kind, generation, deep);
       break;
 
    case T_UARRAY:
-      for (unsigned i = 0; i < type_index_constrs(type); i++)
+      for (i = 0; i < type_index_constrs(type); i++)
          n += tree_visit_type(type_index_constr(type, i),
                               fn, context, kind, generation, deep);
       break;
@@ -1256,6 +1265,9 @@ static unsigned tree_visit_aux(tree_t t, tree_visit_fn_t fn, void *context,
                                tree_kind_t kind, unsigned generation,
                                bool deep)
 {
+   unsigned i;
+   unsigned n = 0;
+
    // If `deep' then will follow links above the tree originally passed
    // to tree_visit - e.g. following references back to their declarations
    // Outside the garbage collector this is usually not what is required
@@ -1264,8 +1276,6 @@ static unsigned tree_visit_aux(tree_t t, tree_visit_fn_t fn, void *context,
       return 0;
 
    t->generation = generation;
-
-   unsigned n = 0;
 
    if (HAS_PORTS(t))
       n += tree_visit_a(&t->ports, fn, context, kind, generation, deep);
@@ -1302,7 +1312,7 @@ static unsigned tree_visit_aux(tree_t t, tree_visit_fn_t fn, void *context,
                           generation, deep);
    }
    if (HAS_ASSOCS(t)) {
-      for (unsigned i = 0; i < t->n_assocs; i++) {
+      for (i = 0; i < t->n_assocs; i++) {
          switch (t->assocs[i].kind) {
          case A_NAMED:
             n += tree_visit_aux(t->assocs[i].name, fn, context,
@@ -1331,7 +1341,7 @@ static unsigned tree_visit_aux(tree_t t, tree_visit_fn_t fn, void *context,
    }
    else if (IS(t, T_SIGNAL_DECL) && deep) {
       n += tree_visit_a(&t->drivers, fn, context, kind, generation, deep);
-      for (unsigned i = 0; i < t->n_elems; i++)
+      for (i = 0; i < t->n_elems; i++)
          n += tree_visit_a(&t->sub_drivers[i], fn, context,
                            kind, generation, deep);
    }
@@ -1343,7 +1353,7 @@ static unsigned tree_visit_aux(tree_t t, tree_visit_fn_t fn, void *context,
       n += tree_visit_aux(t->file_mode, fn, context, kind, generation, deep);
 
    if (deep) {
-      for (unsigned i = 0; i < t->n_attrs; i++) {
+      for (i = 0; i < t->n_attrs; i++) {
          switch (t->attrs[i].kind) {
          case A_TREE:
             n += tree_visit_aux(t->attrs[i].tval, fn, context,
@@ -1419,6 +1429,7 @@ static void write_loc(loc_t *l, tree_wr_ctx_t ctx)
 
 static loc_t read_loc(tree_rd_ctx_t ctx)
 {
+   loc_t l;
    const char *fname;
    uint8_t fmarker = read_u8(ctx->file);
    if (fmarker == 0xff) {
@@ -1436,7 +1447,8 @@ static loc_t read_loc(tree_rd_ctx_t ctx)
       assert(fname != NULL);
    }
 
-   loc_t l = { .file = fname, .linebuf = NULL };
+   l.file         = fname;
+   l.linebuf      = NULL;
    l.first_line   = read_u16(ctx->file);
    l.first_column = read_u16(ctx->file);
    l.last_line    = read_u16(ctx->file);
@@ -1446,23 +1458,26 @@ static loc_t read_loc(tree_rd_ctx_t ctx)
 
 static void write_a(struct tree_array *a, tree_wr_ctx_t ctx)
 {
+   unsigned i;
    write_u32(a->count, ctx->file);
-   for (unsigned i = 0; i < a->count; i++)
+   for (i = 0; i < a->count; i++)
       tree_write(a->items[i], ctx);
 }
 
 static void read_a(struct tree_array *a, tree_rd_ctx_t ctx)
 {
+   unsigned i;
    a->count = a->max = read_u32(ctx->file);
    a->items = xmalloc(a->count * sizeof(tree_t));
-   for (unsigned i = 0; i < a->count; i++)
+   for (i = 0; i < a->count; i++)
       a->items[i] = tree_read(ctx);
 }
 
 static void write_p(struct param_array *a, tree_wr_ctx_t ctx)
 {
+   unsigned i;
    write_u32(a->count, ctx->file);
-   for (unsigned i = 0; i < a->count; i++) {
+   for (i = 0; i < a->count; i++) {
       write_u16(a->items[i].kind, ctx->file);
       switch (a->items[i].kind) {
       case P_POS:
@@ -1484,10 +1499,11 @@ static void write_p(struct param_array *a, tree_wr_ctx_t ctx)
 
 static void read_p(struct param_array *a, tree_rd_ctx_t ctx)
 {
+   unsigned i;
    a->max = a->count = read_u32(ctx->file);
    a->items = xmalloc(sizeof(param_t) * a->count);
 
-   for (unsigned i = 0; i < a->count; i++) {
+   for (i = 0; i < a->count; i++) {
       switch ((a->items[i].kind = read_u16(ctx->file))) {
       case P_POS:
          a->items[i].pos   = read_u16(ctx->file);
@@ -1508,9 +1524,11 @@ static void read_p(struct param_array *a, tree_rd_ctx_t ctx)
 
 tree_wr_ctx_t tree_write_begin(FILE *f)
 {
+   struct tree_wr_ctx *ctx;
+
    write_u16(FILE_FMT_VER, f);
 
-   struct tree_wr_ctx *ctx = xmalloc(sizeof(struct tree_wr_ctx));
+   ctx = xmalloc(sizeof(struct tree_wr_ctx));
    ctx->file       = f;
    ctx->generation = next_generation++;
    ctx->n_trees    = 0;
@@ -1535,6 +1553,8 @@ FILE *tree_write_file(tree_wr_ctx_t ctx)
 
 void tree_write(tree_t t, tree_wr_ctx_t ctx)
 {
+   unsigned i;
+
    if (t == NULL) {
       write_u16(0xffff, ctx->file);  // Null marker
       return;
@@ -1584,7 +1604,7 @@ void tree_write(tree_t t, tree_wr_ctx_t ctx)
       tree_write(t->ref, ctx);
    if (HAS_CONTEXT(t)) {
       write_u16(t->n_contexts, ctx->file);
-      for (unsigned i = 0; i < t->n_contexts; i++) {
+      for (i = 0; i < t->n_contexts; i++) {
          ident_write(t->context[i].name, ctx->ident_ctx);
          write_loc(&t->context[i].loc, ctx);
       }
@@ -1601,7 +1621,7 @@ void tree_write(tree_t t, tree_wr_ctx_t ctx)
    if (HAS_ASSOCS(t)) {
       write_u16(t->n_assocs, ctx->file);
 
-      for (unsigned i = 0; i < t->n_assocs; i++) {
+      for (i = 0; i < t->n_assocs; i++) {
          write_u16(t->assocs[i].kind, ctx->file);
          tree_write(t->assocs[i].value, ctx);
 
@@ -1669,7 +1689,7 @@ void tree_write(tree_t t, tree_wr_ctx_t ctx)
    }
 
    write_u16(t->n_attrs, ctx->file);
-   for (unsigned i = 0; i < t->n_attrs; i++) {
+   for (i = 0; i < t->n_attrs; i++) {
       write_u16(t->attrs[i].kind, ctx->file);
       ident_write(t->attrs[i].name, ctx->ident_ctx);
 
@@ -1698,6 +1718,8 @@ void tree_write(tree_t t, tree_wr_ctx_t ctx)
 
 tree_t tree_read(tree_rd_ctx_t ctx)
 {
+   unsigned i;
+   tree_t t;
    uint16_t marker = read_u16(ctx->file);
    if (marker == 0xffff)
       return NULL;    // Null marker
@@ -1710,7 +1732,7 @@ tree_t tree_read(tree_rd_ctx_t ctx)
 
    assert(marker < T_LAST_TREE_KIND);
 
-   tree_t t = tree_new((tree_kind_t)marker);
+   t = tree_new((tree_kind_t)marker);
    t->loc = read_loc(ctx);
 
    // Stash pointer for later back references
@@ -1757,7 +1779,7 @@ tree_t tree_read(tree_rd_ctx_t ctx)
       t->n_contexts = read_u16(ctx->file);
       t->context    = xmalloc(sizeof(context_t) * MAX_CONTEXTS);
 
-      for (unsigned i = 0; i < t->n_contexts; i++) {
+      for (i = 0; i < t->n_contexts; i++) {
          t->context[i].name = ident_read(ctx->ident_ctx);
          t->context[i].loc  = read_loc(ctx);
       }
@@ -1775,7 +1797,7 @@ tree_t tree_read(tree_rd_ctx_t ctx)
       t->n_assocs_alloc = t->n_assocs = read_u16(ctx->file);
       t->assocs = xmalloc(sizeof(assoc_t) * t->n_assocs);
 
-      for (unsigned i = 0; i < t->n_assocs; i++) {
+      for (i = 0; i < t->n_assocs; i++) {
          t->assocs[i].kind  = read_u16(ctx->file);
          t->assocs[i].value = tree_read(ctx);
 
@@ -1846,7 +1868,7 @@ tree_t tree_read(tree_rd_ctx_t ctx)
    assert(t->n_attrs <= MAX_ATTRS);
    t->attrs = xmalloc(sizeof(struct attr) * MAX_ATTRS);
 
-   for (unsigned i = 0; i < t->n_attrs; i++) {
+   for (i = 0; i < t->n_attrs; i++) {
       t->attrs[i].kind = read_u16(ctx->file);
       t->attrs[i].name = ident_read(ctx->ident_ctx);
 
@@ -1880,12 +1902,13 @@ tree_t tree_read(tree_rd_ctx_t ctx)
 
 tree_rd_ctx_t tree_read_begin(FILE *f, const char *fname)
 {
+   struct tree_rd_ctx *ctx;
    uint16_t ver = read_u16(f);
    if (ver != FILE_FMT_VER)
       fatal("%s: serialised version %x expected %x",
             fname, ver, FILE_FMT_VER);
 
-   struct tree_rd_ctx *ctx = xmalloc(sizeof(struct tree_rd_ctx));
+   ctx = xmalloc(sizeof(struct tree_rd_ctx));
    ctx->file      = f;
    ctx->ident_ctx = ident_read_begin(f);
    ctx->type_ctx  = type_read_begin(ctx, ctx->ident_ctx);
@@ -1921,9 +1944,10 @@ tree_t tree_read_recall(tree_rd_ctx_t ctx, uint32_t index)
 
 static struct attr *tree_find_attr(tree_t t, ident_t name, attr_kind_t kind)
 {
+   unsigned i;
    assert(t != NULL);
 
-   for (unsigned i = 0; i < t->n_attrs; i++) {
+   for (i = 0; i < t->n_attrs; i++) {
       if (t->attrs[i].kind == kind && t->attrs[i].name == name)
          return &t->attrs[i];
    }
@@ -1933,18 +1957,21 @@ static struct attr *tree_find_attr(tree_t t, ident_t name, attr_kind_t kind)
 
 static struct attr *tree_add_attr(tree_t t, ident_t name, attr_kind_t kind)
 {
+   struct attr *a;
+   unsigned i;
+
    assert(t != NULL);
    assert(t->n_attrs < MAX_ATTRS);
    assert(name != NULL);
 
-   struct attr *a = tree_find_attr(t, name, kind);
+   a = tree_find_attr(t, name, kind);
    if (a != NULL)
       return a;
 
    if (t->attrs == NULL)
       t->attrs = xmalloc(sizeof(struct attr) * MAX_ATTRS);
 
-   unsigned i = t->n_attrs++;
+   i = t->n_attrs++;
    t->attrs[i].kind = kind;
    t->attrs[i].name = name;
 
@@ -2044,12 +2071,15 @@ static tree_t tree_rewrite_aux(tree_t t, struct rewrite_ctx *ctx);
 
 static void rewrite_a(struct tree_array *a, struct rewrite_ctx *ctx)
 {
-   for (unsigned i = 0; i < a->count; i++)
+   unsigned i;
+   unsigned n;
+
+   for (i = 0; i < a->count; i++)
       a->items[i] = tree_rewrite_aux(a->items[i], ctx);
 
    // If an item was rewritten to NULL then delete it
-   unsigned n = 0;
-   for (unsigned i = 0; i < a->count; i++) {
+   n = 0;
+   for (i = 0; i < a->count; i++) {
       if (a->items[i] != NULL)
          a->items[n++] = a->items[i];
    }
@@ -2058,7 +2088,8 @@ static void rewrite_a(struct tree_array *a, struct rewrite_ctx *ctx)
 
 static void rewrite_p(struct param_array *a, struct rewrite_ctx *ctx)
 {
-   for (unsigned i = 0; i < a->count; i++) {
+   unsigned i;
+   for (i = 0; i < a->count; i++) {
       switch (a->items[i].kind) {
       case P_RANGE:
          a->items[i].range.left =
@@ -2077,6 +2108,8 @@ static void rewrite_p(struct param_array *a, struct rewrite_ctx *ctx)
 
 static tree_t tree_rewrite_aux(tree_t t, struct rewrite_ctx *ctx)
 {
+   unsigned i;
+
    if (t == NULL)
       return NULL;
 
@@ -2125,7 +2158,7 @@ static tree_t tree_rewrite_aux(tree_t t, struct rewrite_ctx *ctx)
       tree_set_range(t, r);
    }
    if (HAS_ASSOCS(t)) {
-      for (unsigned i = 0; i < tree_assocs(t); i++) {
+      for (i = 0; i < tree_assocs(t); i++) {
          assoc_t *a = &t->assocs[i];
          a->value = tree_rewrite_aux(a->value, ctx);
 
@@ -2176,7 +2209,7 @@ static tree_t tree_rewrite_aux(tree_t t, struct rewrite_ctx *ctx)
       case T_SUBTYPE:
       case T_PHYSICAL:
       case T_CARRAY:
-         for (unsigned i = 0; i < type_dims(t->type); i++) {
+         for (i = 0; i < type_dims(t->type); i++) {
             range_t r = type_dim(t->type, i);
             r.left  = tree_rewrite_aux(r.left, ctx);
             r.right = tree_rewrite_aux(r.right, ctx);
@@ -2194,19 +2227,19 @@ static tree_t tree_rewrite_aux(tree_t t, struct rewrite_ctx *ctx)
 
 tree_t tree_rewrite(tree_t t, tree_rewrite_fn_t fn, void *context)
 {
+   struct rewrite_ctx ctx;
+   tree_t result;
    size_t cache_sz = sizeof(tree_t) * n_trees_alloc;
    tree_t *cache = xmalloc(cache_sz);
    memset(cache, '\0', cache_sz);
 
-   struct rewrite_ctx ctx = {
-      .cache      = cache,
-      .index      = 0,
-      .generation = next_generation++,
-      .fn         = fn,
-      .context    = context
-   };
+   ctx.cache      = cache;
+   ctx.index      = 0;
+   ctx.generation = next_generation++;
+   ctx.fn         = fn;
+   ctx.context    = context;
 
-   tree_t result = tree_rewrite_aux(t, &ctx);
+   result = tree_rewrite_aux(t, &ctx);
    free(cache);
    return result;
 }
@@ -2222,20 +2255,24 @@ static tree_t tree_copy_aux(tree_t t, struct tree_copy_ctx *ctx);
 static void copy_a(struct tree_array *from, struct tree_array *to,
                    struct tree_copy_ctx *ctx)
 {
+   unsigned i;
+
    to->count = to->max = from->count;
    to->items = xmalloc(to->count * sizeof(param_t));
 
-   for (unsigned i = 0; i < from->count; i++)
+   for (i = 0; i < from->count; i++)
       to->items[i] = tree_copy_aux(from->items[i], ctx);
 }
 
 static void copy_p(struct param_array *from, struct param_array *to,
                    struct tree_copy_ctx *ctx)
 {
+   unsigned i;
+
    to->count = to->max = from->count;
    to->items = xmalloc(to->count * sizeof(param_t));
 
-   for (unsigned i = 0; i < from->count; i++) {
+   for (i = 0; i < from->count; i++) {
       param_t *fp = &from->items[i];
       param_t *tp = &to->items[i];
 
@@ -2259,6 +2296,9 @@ static void copy_p(struct param_array *from, struct param_array *to,
 
 static tree_t tree_copy_aux(tree_t t, struct tree_copy_ctx *ctx)
 {
+   unsigned i;
+   tree_t copy;
+
    if (t == NULL)
       return NULL;
 
@@ -2268,7 +2308,7 @@ static tree_t tree_copy_aux(tree_t t, struct tree_copy_ctx *ctx)
       return ctx->copied[t->index];
    }
 
-   tree_t copy = tree_new(t->kind);
+   copy = tree_new(t->kind);
 
    t->generation = ctx->generation;
    t->index      = (ctx->n_copied)++;
@@ -2306,7 +2346,7 @@ static tree_t tree_copy_aux(tree_t t, struct tree_copy_ctx *ctx)
    if (HAS_REF(t))
       copy->ref = tree_copy_aux(t->ref, ctx);
    if (HAS_CONTEXT(t)) {
-      for (unsigned i = 0; i < tree_contexts(t); i++)
+      for (i = 0; i < tree_contexts(t); i++)
          tree_add_context(copy, tree_context(t, i));
    }
    if (HAS_PARAMS(t))
@@ -2317,7 +2357,7 @@ static tree_t tree_copy_aux(tree_t t, struct tree_copy_ctx *ctx)
       copy->range.right = tree_copy_aux(t->range.right, ctx);
    }
    if (HAS_ASSOCS(t)) {
-      for (unsigned i = 0; i < tree_assocs(t); i++) {
+      for (i = 0; i < tree_assocs(t); i++) {
          assoc_t a = tree_assoc(t, i);
          switch (a.kind) {
          case A_POS:
@@ -2372,7 +2412,7 @@ static tree_t tree_copy_aux(tree_t t, struct tree_copy_ctx *ctx)
       break;
    }
 
-   for (unsigned i = 0; i < t->n_attrs; i++) {
+   for (i = 0; i < t->n_attrs; i++) {
       switch (t->attrs[i].kind) {
       case A_STRING:
          tree_add_attr_str(copy, t->attrs[i].name, t->attrs[i].sval);
@@ -2414,19 +2454,24 @@ tree_t call_builtin(const char *builtin, type_t type, ...)
       ident_t bname;
       tree_t  decl;
    };
-
    char name[64];
-   snprintf(name, sizeof(name), "NVC.BUILTIN.%s", builtin);
-   for (char *p = name; *p != '\0'; p++)
-      *p = toupper((uint8_t)*p);
-
+   char *p;
    static struct decl_cache *cache = NULL;
-
-   ident_t bname = ident_new(builtin);
-   ident_t name_i = ident_new(name);
-
+   ident_t bname, name_i;
    struct decl_cache *it;
    tree_t decl = NULL;
+   struct decl_cache *c;
+   tree_t call;
+   va_list ap;
+   tree_t arg;
+
+   snprintf(name, sizeof(name), "NVC.BUILTIN.%s", builtin);
+   for (p = name; *p != '\0'; p++)
+      *p = toupper((uint8_t)*p);
+
+   bname = ident_new(builtin);
+   name_i = ident_new(name);
+
    for (it = cache; it != NULL; it = it->next) {
       if (it->bname == bname) {
          decl = it->decl;
@@ -2440,22 +2485,20 @@ tree_t call_builtin(const char *builtin, type_t type, ...)
       tree_add_attr_str(decl, ident_new("builtin"), ident_new(builtin));
    }
 
-   struct decl_cache *c = xmalloc(sizeof(struct decl_cache));
+   c = xmalloc(sizeof(struct decl_cache));
    c->next  = cache;
    c->bname = bname;
    c->decl  = decl;
 
    cache = c;
 
-   tree_t call = tree_new(T_FCALL);
+   call = tree_new(T_FCALL);
    tree_set_ident(call, name_i);
    tree_set_ref(call, decl);
    if (type != NULL)
       tree_set_type(call, type);
 
-   va_list ap;
    va_start(ap, type);
-   tree_t arg;
    while ((arg = va_arg(ap, tree_t))) {
       param_t p = { .kind = P_POS, .value = arg };
       tree_add_param(call, p);

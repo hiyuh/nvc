@@ -118,11 +118,13 @@ static struct option *options = NULL;
 static void paginate_msg(const char *fmt, va_list ap, int left, int right)
 {
    char *strp = NULL;
+   const char *p;
+   int col;
    if (vasprintf(&strp, fmt, ap) < 0)
       abort();
 
-   const char *p = strp;
-   int col = left;
+   p = strp;
+   col = left;
    while (*p != '\0') {
       if ((*p == '\n') || (isspace((uint8_t)*p) && col >= right)) {
          // Can break line here
@@ -214,10 +216,11 @@ static void msg_at(print_fn_t fn, const loc_t *loc, const char *fmt, va_list ap)
 
 void error_at(const loc_t *loc, const char *fmt, ...)
 {
+   char *strp;
    va_list ap;
    va_start(ap, fmt);
 
-   char *strp = NULL;
+   strp = NULL;
    if (vasprintf(&strp, fmt, ap) < 0)
       abort();
    error_fn(strp, loc != NULL ? loc : &LOC_INVALID);
@@ -297,6 +300,13 @@ void fatal_errno(const char *fmt, ...)
 
 void fmt_loc(FILE *f, const struct loc *loc)
 {
+   const char *lb;
+   char buf[80];
+   size_t i = 0;
+   bool many_lines;
+   int last_col;
+   int j;
+
    if ((loc == NULL) || (loc->first_line == LINE_INVALID))
       return;
 
@@ -305,9 +315,7 @@ void fmt_loc(FILE *f, const struct loc *loc)
    if (loc->linebuf == NULL)
       return;
 
-   const char *lb = loc->linebuf;
-   char buf[80];
-   size_t i = 0;
+   lb = loc->linebuf;
    while (i < sizeof(buf) - 1 && *lb != '\0' && *lb != '\n') {
       if (*lb == '\t')
          buf[i++] = ' ';
@@ -318,16 +326,16 @@ void fmt_loc(FILE *f, const struct loc *loc)
    buf[i] = '\0';
 
    // Print ... if error location spans multiple lines
-   bool many_lines = (loc->first_line != loc->last_line)
+   many_lines = (loc->first_line != loc->last_line)
       || (i == sizeof(buf) - 1 && i <= loc->last_column);
-   int last_col = many_lines ? strlen(buf) + 3 : loc->last_column;
+   last_col = many_lines ? strlen(buf) + 3 : loc->last_column;
 
    set_attr(ANSI_FG_CYAN);
    fprintf(f, "    %s%s\n", buf, many_lines ? " ..." : "");
-   for (int j = 0; j < loc->first_column + 4; j++)
+   for (j = 0; j < loc->first_column + 4; j++)
       fprintf(f, " ");
    set_attr(ANSI_FG_GREEN);
-   for (int j = 0; j < last_col - loc->first_column + 1; j++)
+   for (j = 0; j < last_col - loc->first_column + 1; j++)
       fprintf(f, "^");
    set_attr(ANSI_RESET);
    fprintf(f, "\n");

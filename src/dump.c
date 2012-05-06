@@ -35,12 +35,15 @@ static void tab(int indent)
 
 static void dump_params(tree_t t)
 {
+   unsigned i;
+   param_t p;
+
    if (tree_params(t) > 0) {
       printf("(");
-      for (unsigned i = 0; i < tree_params(t); i++) {
+      for (i = 0; i < tree_params(t); i++) {
          if (i > 0)
             printf(", ");
-         param_t p = tree_param(t, i);
+         p = tree_param(t, i);
          switch (p.kind) {
          case P_POS:
             break;
@@ -74,6 +77,9 @@ static void dump_range(range_t r)
 
 static void dump_expr(tree_t t)
 {
+   unsigned i;
+   assoc_t a;
+
    switch (tree_kind(t)) {
    case T_FCALL:
       {
@@ -88,7 +94,7 @@ static void dump_expr(tree_t t)
          literal_t l = tree_literal(t);
          switch (l.kind) {
          case L_INT:
-            printf("%"PRIi64, l.i);
+            printf("%lli", l.i);
             break;
          default:
             assert(false);
@@ -98,10 +104,10 @@ static void dump_expr(tree_t t)
 
    case T_AGGREGATE:
       printf("(");
-      for (unsigned i = 0; i < tree_assocs(t); i++) {
+      for (i = 0; i < tree_assocs(t); i++) {
          if (i > 0)
             printf(", ");
-         assoc_t a = tree_assoc(t, i);
+         a = tree_assoc(t, i);
          switch (a.kind) {
          case A_POS:
             dump_expr(a.value);
@@ -164,12 +170,15 @@ static void dump_expr(tree_t t)
 
 static void dump_type(type_t type)
 {
+   unsigned i;
+   range_t r;
+
    if (type_kind(type) == T_CARRAY) {
       printf("%s(", istr(type_ident(type)));
-      for (unsigned i = 0; i < type_dims(type); i++) {
+      for (i = 0; i < type_dims(type); i++) {
          if (i > 0)
             printf(", ");
-         range_t r = type_dim(type, i);
+         r = type_dim(type, i);
          dump_expr(r.left);
          switch (r.kind) {
          case RANGE_TO:
@@ -196,6 +205,8 @@ static void dump_type(type_t type)
 
 static void dump_decl(tree_t t, int indent)
 {
+   unsigned i;
+
    tab(indent);
 
    switch (tree_kind(t)) {
@@ -243,7 +254,7 @@ static void dump_decl(tree_t t, int indent)
 
    case T_FUNC_DECL:
       printf("function %s (\n", istr(tree_ident(t)));
-      for (unsigned i = 0; i < tree_ports(t); i++) {
+      for (i = 0; i < tree_ports(t); i++) {
          if (i > 0)
             printf(";\n");
          dump_port(tree_port(t, i), indent + 4);
@@ -255,7 +266,7 @@ static void dump_decl(tree_t t, int indent)
 
    case T_FUNC_BODY:
       printf("function %s (\n", istr(tree_ident(t)));
-      for (unsigned i = 0; i < tree_ports(t); i++) {
+      for (i = 0; i < tree_ports(t); i++) {
          if (i > 0)
             printf(";\n");
          dump_port(tree_port(t, i), indent + 4);
@@ -263,11 +274,11 @@ static void dump_decl(tree_t t, int indent)
       printf(" )\n");
       tab(indent + 2);
       printf("return %s is\n", type_pp(type_result(tree_type(t))));
-      for (unsigned i = 0; i < tree_decls(t); i++)
+      for (i = 0; i < tree_decls(t); i++)
          dump_decl(tree_decl(t, i), indent + 2);
       tab(indent);
       printf("begin\n");
-      for (unsigned i = 0; i < tree_stmts(t); i++)
+      for (i = 0; i < tree_stmts(t); i++)
          dump_stmt(tree_stmt(t, i), indent + 2);
       tab(indent);
       printf("end function;\n\n");
@@ -275,7 +286,7 @@ static void dump_decl(tree_t t, int indent)
 
    case T_PROC_DECL:
       printf("procedure %s (\n", istr(tree_ident(t)));
-      for (unsigned i = 0; i < tree_ports(t); i++) {
+      for (i = 0; i < tree_ports(t); i++) {
          if (i > 0)
             printf(";\n");
          dump_port(tree_port(t, i), indent + 4);
@@ -285,17 +296,17 @@ static void dump_decl(tree_t t, int indent)
 
    case T_PROC_BODY:
       printf("procedure %s (\n", istr(tree_ident(t)));
-      for (unsigned i = 0; i < tree_ports(t); i++) {
+      for (i = 0; i < tree_ports(t); i++) {
          if (i > 0)
             printf(";\n");
          dump_port(tree_port(t, i), indent + 4);
       }
       printf(" ) is\n");
-      for (unsigned i = 0; i < tree_decls(t); i++)
+      for (i = 0; i < tree_decls(t); i++)
          dump_decl(tree_decl(t, i), indent + 2);
       tab(indent);
       printf("begin\n");
-      for (unsigned i = 0; i < tree_stmts(t); i++)
+      for (i = 0; i < tree_stmts(t); i++)
          dump_stmt(tree_stmt(t, i), indent + 2);
       tab(indent);
       printf("end procedure;\n\n");
@@ -316,6 +327,10 @@ static void dump_decl(tree_t t, int indent)
 
 static void dump_stmt(tree_t t, int indent)
 {
+   unsigned i;
+   tree_t w;
+   assoc_t a;
+
    tab(indent);
    printf("%s: ", istr(tree_ident(t)));
 
@@ -324,7 +339,7 @@ static void dump_stmt(tree_t t, int indent)
       printf("process ");
       if (tree_triggers(t) > 0) {
          printf("(");
-         for (unsigned i = 0; i < tree_triggers(t); i++) {
+         for (i = 0; i < tree_triggers(t); i++) {
             if (i > 0)
                printf(", ");
             dump_expr(tree_trigger(t, i));
@@ -332,11 +347,11 @@ static void dump_stmt(tree_t t, int indent)
          printf(") ");
       }
       printf("is\n");
-      for (unsigned i = 0; i < tree_decls(t); i++)
+      for (i = 0; i < tree_decls(t); i++)
          dump_decl(tree_decl(t, i), indent + 2);
       tab(indent);
       printf("begin\n");
-      for (unsigned i = 0; i < tree_stmts(t); i++)
+      for (i = 0; i < tree_stmts(t); i++)
          dump_stmt(tree_stmt(t, i), indent + 2);
       tab(indent);
       printf("end process;\n\n");
@@ -345,10 +360,10 @@ static void dump_stmt(tree_t t, int indent)
    case T_SIGNAL_ASSIGN:
       dump_expr(tree_target(t));
       printf(" <= ");
-      for (unsigned i = 0; i < tree_waveforms(t); i++) {
+      for (i = 0; i < tree_waveforms(t); i++) {
          if (i > 0)
             printf(", ");
-         tree_t w = tree_waveform(t, i);
+         w = tree_waveform(t, i);
          dump_expr(tree_value(w));
          if (tree_has_delay(w)) {
             printf(" after ");
@@ -367,7 +382,7 @@ static void dump_stmt(tree_t t, int indent)
       printf("wait");
       if (tree_triggers(t) > 0) {
          printf(" on ");
-         for (unsigned i = 0; i < tree_triggers(t); i++) {
+         for (i = 0; i < tree_triggers(t); i++) {
             if (i > 0)
                printf(", ");
             dump_expr(tree_trigger(t, i));
@@ -381,11 +396,11 @@ static void dump_stmt(tree_t t, int indent)
 
    case T_BLOCK:
       printf("block is\n");
-      for (unsigned i = 0; i < tree_decls(t); i++)
+      for (i = 0; i < tree_decls(t); i++)
          dump_decl(tree_decl(t, i), indent + 2);
       tab(indent);
       printf("begin\n");
-      for (unsigned i = 0; i < tree_stmts(t); i++)
+      for (i = 0; i < tree_stmts(t); i++)
          dump_stmt(tree_stmt(t, i), indent + 2);
       tab(indent);
       printf("end block");
@@ -407,7 +422,7 @@ static void dump_stmt(tree_t t, int indent)
          printf(" ");
       }
       printf("loop\n");
-      for (unsigned i = 0; i < tree_stmts(t); i++)
+      for (i = 0; i < tree_stmts(t); i++)
          dump_stmt(tree_stmt(t, i), indent + 2);
       tab(indent);
       printf("end loop");
@@ -417,12 +432,12 @@ static void dump_stmt(tree_t t, int indent)
       printf("if ");
       dump_expr(tree_value(t));
       printf(" then\n");
-      for (unsigned i = 0; i < tree_stmts(t); i++)
+      for (i = 0; i < tree_stmts(t); i++)
          dump_stmt(tree_stmt(t, i), indent + 2);
       if (tree_else_stmts(t) > 0) {
          tab(indent);
          printf("else\n");
-         for (unsigned i = 0; i < tree_else_stmts(t); i++)
+         for (i = 0; i < tree_else_stmts(t); i++)
             dump_stmt(tree_else_stmt(t, i), indent + 2);
       }
       tab(indent);
@@ -441,9 +456,9 @@ static void dump_stmt(tree_t t, int indent)
       printf("case ");
       dump_expr(tree_value(t));
       printf(" is\n");
-      for (unsigned i = 0; i < tree_assocs(t); i++) {
+      for (i = 0; i < tree_assocs(t); i++) {
          tab(indent + 2);
-         assoc_t a = tree_assoc(t, i);
+         a = tree_assoc(t, i);
          switch (a.kind) {
          case A_NAMED:
             printf("when ");
@@ -486,8 +501,8 @@ static void dump_stmt(tree_t t, int indent)
 
 static void dump_port(tree_t t, int indent)
 {
-   tab(indent);
    const char *class = NULL, *dir = NULL;
+   tab(indent);
    switch (tree_class(t)) {
    case C_SIGNAL:   class = "signal";   break;
    case C_VARIABLE: class = "variable"; break;
@@ -508,22 +523,24 @@ static void dump_port(tree_t t, int indent)
 
 static void dump_elab(tree_t t)
 {
+   unsigned i;
    printf("entity %s is\nend entity;\n\n", istr(tree_ident(t)));
    printf("architecture elab of %s is\n", istr(tree_ident(t)));
-   for (unsigned i = 0; i < tree_decls(t); i++)
+   for (i = 0; i < tree_decls(t); i++)
       dump_decl(tree_decl(t, i), 2);
    printf("begin\n");
-   for (unsigned i = 0; i < tree_stmts(t); i++)
+   for (i = 0; i < tree_stmts(t); i++)
       dump_stmt(tree_stmt(t, i), 2);
    printf("end architecture;\n");
 }
 
 static void dump_entity(tree_t t)
 {
+   unsigned i;
    printf("entity %s is\n", istr(tree_ident(t)));
    if (tree_generics(t) > 0) {
       printf("  port (\n");
-      for (unsigned i = 0; i < tree_generics(t); i++) {
+      for (i = 0; i < tree_generics(t); i++) {
          if (i > 0)
             printf(";\n");
          tab(4);
@@ -532,7 +549,7 @@ static void dump_entity(tree_t t)
       printf(" );\n");
    }
    printf("  port (\n");
-   for (unsigned i = 0; i < tree_ports(t); i++) {
+   for (i = 0; i < tree_ports(t); i++) {
       if (i > 0)
          printf(";\n");
       tab(4);
@@ -544,28 +561,31 @@ static void dump_entity(tree_t t)
 
 static void dump_arch(tree_t t)
 {
+   unsigned i;
    printf("architecture %s of %s is\n",
           istr(tree_ident(t)), istr(tree_ident2(t)));
-   for (unsigned i = 0; i < tree_decls(t); i++)
+   for (i = 0; i < tree_decls(t); i++)
       dump_decl(tree_decl(t, i), 2);
    printf("begin\n");
-   for (unsigned i = 0; i < tree_stmts(t); i++)
+   for (i = 0; i < tree_stmts(t); i++)
       dump_stmt(tree_stmt(t, i), 2);
    printf("end architecture;\n");
 }
 
 static void dump_package(tree_t t)
 {
+   unsigned i;
    printf("package %s is\n", istr(tree_ident(t)));
-   for (unsigned i = 0; i < tree_decls(t); i++)
+   for (i = 0; i < tree_decls(t); i++)
       dump_decl(tree_decl(t, i), 2);
    printf("end package;\n");
 }
 
 static void dump_package_body(tree_t t)
 {
+   unsigned i;
    printf("package body %s is\n", istr(tree_ident(t)));
-   for (unsigned i = 0; i < tree_decls(t); i++)
+   for (i = 0; i < tree_decls(t); i++)
       dump_decl(tree_decl(t, i), 2);
    printf("end package body;\n");
 }

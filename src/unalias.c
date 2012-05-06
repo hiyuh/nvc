@@ -34,20 +34,24 @@ static tree_t get_ref(tree_t decl)
 
 static tree_t unalias_index(tree_t decl, tree_t index)
 {
-   tree_t base_decl = tree_ref(tree_value(decl));
+   tree_t base_decl, off, rkind_lit, off_dir;
+   type_t alias_type, base_type, ptype;
+   range_t alias_r;
+
+   base_decl = tree_ref(tree_value(decl));
    assert(tree_kind(base_decl) != T_ALIAS);
 
-   type_t alias_type = tree_type(decl);
-   type_t base_type  = tree_type(base_decl);
+   alias_type = tree_type(decl);
+   base_type  = tree_type(base_decl);
 
    assert(type_kind(alias_type) == T_CARRAY);
    assert(type_dims(alias_type) == 1);  // TODO: multi-dimensional arrays
 
-   range_t alias_r = type_dim(alias_type, 0);
+   alias_r = type_dim(alias_type, 0);
 
-   type_t ptype = tree_type(index);
+   ptype = tree_type(index);
 
-   tree_t off = call_builtin("sub", ptype, index, alias_r.left, NULL);
+   off = call_builtin("sub", ptype, index, alias_r.left, NULL);
 
    switch (type_kind(base_type)) {
    case T_CARRAY:
@@ -75,14 +79,14 @@ static tree_t unalias_index(tree_t decl, tree_t index)
          l.kind = L_INT;
          l.i = alias_r.kind;
 
-         tree_t rkind_lit = tree_new(T_LITERAL);
+         rkind_lit = tree_new(T_LITERAL);
          tree_set_literal(rkind_lit, l);
          tree_set_type(rkind_lit, ptype);
 
          // Call dircmp builtin which multiplies its third argument
          // by -1 if the direction of the first argument is not equal
          // to the direction of the second
-         tree_t off_dir = call_builtin("uarray_dircmp", ptype,
+         off_dir = call_builtin("uarray_dircmp", ptype,
                                        ref, rkind_lit, off, NULL);
 
          return call_builtin("add", ptype, base_left, off_dir, NULL);
@@ -96,15 +100,18 @@ static tree_t unalias_index(tree_t decl, tree_t index)
 
 static tree_t unalias_array_slice(tree_t t)
 {
-   tree_t value = tree_value(t);
+   tree_t value, decl, base_decl;
+   type_t base_type;
+
+   value = tree_value(t);
    if (tree_kind(value) != T_REF)
       return t;
 
-   tree_t decl = tree_ref(value);
+   decl = tree_ref(value);
 
    if (tree_kind(decl) == T_ALIAS) {
-      tree_t base_decl = tree_ref(tree_value(decl));
-      type_t base_type = tree_type(base_decl);
+      base_decl = tree_ref(tree_value(decl));
+      base_type = tree_type(base_decl);
 
       switch (type_kind(base_type)) {
       case T_SUBTYPE:
@@ -131,24 +138,27 @@ static tree_t unalias_array_slice(tree_t t)
 
 static tree_t unalias_array_ref(tree_t t)
 {
-   tree_t value = tree_value(t);
+   tree_t value, decl, base_decl, new;
+   param_t p;
+
+   value = tree_value(t);
    if (tree_kind(value) != T_REF)
       return t;
 
-   tree_t decl = tree_ref(value);
+   decl = tree_ref(value);
 
    if (tree_kind(decl) == T_ALIAS) {
       // Generate code to map from alias indexing to the
       // indexing of the underlying array
 
-      tree_t base_decl = tree_ref(tree_value(decl));
+      base_decl = tree_ref(tree_value(decl));
 
-      tree_t new = tree_new(T_ARRAY_REF);
+      new = tree_new(T_ARRAY_REF);
       tree_set_loc(new, tree_loc(t));
       tree_set_value(new, get_ref(base_decl));
       tree_set_type(new, type_elem(tree_type(base_decl)));
 
-      param_t p = tree_param(t, 0);
+      p = tree_param(t, 0);
       p.value = unalias_index(decl, p.value);
       tree_add_param(new, p);
 

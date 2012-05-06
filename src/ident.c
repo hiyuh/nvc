@@ -49,20 +49,23 @@ static struct trie root = {
 
 static struct trie *alloc_node(char ch, struct trie *prev)
 {
-   struct trie *t = xmalloc(sizeof(struct trie));
+   struct trie *t;
+   struct clist *c;
+   struct clist *it, **where;
+
+   t = xmalloc(sizeof(struct trie));
    t->value     = ch;
    t->depth     = prev->depth + 1;
    t->up        = prev;
    t->children  = NULL;
    t->write_gen = 0;
 
-   struct clist *c = xmalloc(sizeof(struct clist));
+   c = xmalloc(sizeof(struct clist));
    c->value    = ch;
    c->down     = t;
    c->left     = NULL;
    c->right    = NULL;
 
-   struct clist *it, **where;
    for (it = prev->children, where = &(prev->children);
         it != NULL;
         where = (ch < it->value ? &(it->left) : &(it->right)),
@@ -76,10 +79,12 @@ static struct trie *alloc_node(char ch, struct trie *prev)
 
 static void build_trie(const char *str, struct trie *prev, struct trie **end)
 {
+   struct trie *t;
+
    assert(*str != '\0');
    assert(prev != NULL);
 
-   struct trie *t = alloc_node(*str, prev);
+   t = alloc_node(*str, prev);
 
    if (*(++str) == '\0')
       *end = t;
@@ -100,10 +105,12 @@ static struct clist *search_node(struct trie *t, char ch)
 
 static bool search_trie(const char **str, struct trie *t, struct trie **end)
 {
+   struct clist *it;
+
    assert(**str != '\0');
    assert(t != NULL);
 
-   struct clist *it = search_node(t, **str);
+   it = search_node(t, **str);
 
    if (it == NULL) {
       *end = t;
@@ -123,10 +130,11 @@ static bool search_trie(const char **str, struct trie *t, struct trie **end)
 
 ident_t ident_new(const char *str)
 {
+   struct trie *result;
+
    assert(str != NULL);
    assert(*str != '\0');
 
-   struct trie *result;
    if (!search_trie(&str, &root, &result))
       build_trie(str, result, &result);
 
@@ -135,8 +143,6 @@ ident_t ident_new(const char *str)
 
 const char *istr(ident_t ident)
 {
-   assert(ident != NULL);
-
    // This is a bit of a kludge but keeping a sufficient number
    // of static buffers allows us to use istr multiple times in printf
    static char   *buf_set[ISTR_MAX_BUFS];
@@ -145,6 +151,12 @@ const char *istr(ident_t ident)
 
    char **bufp = &buf_set[next_buf];
    size_t *blenp = &buflen[next_buf];
+
+   char *p;
+   struct trie *it;
+
+   assert(ident != NULL);
+
    next_buf = (next_buf + 1) % ISTR_MAX_BUFS;
 
    if (*bufp == NULL) {
@@ -157,10 +169,9 @@ const char *istr(ident_t ident)
       *bufp = xrealloc(*bufp, *blenp);
    }
 
-   char *p = *bufp + ident->depth - 1;
+   p = *bufp + ident->depth - 1;
    *p = '\0';
 
-   struct trie *it;
    for (it = ident; it->value != '\0'; it = it->up) {
       assert(it != NULL);
       *(--p) = it->value;
@@ -173,9 +184,11 @@ const char *istr(ident_t ident)
 ident_wr_ctx_t ident_write_begin(FILE *f)
 {
    static uint8_t ident_wr_gen = 1;
+   struct ident_wr_ctx *ctx;
+
    assert(ident_wr_gen > 0);
 
-   struct ident_wr_ctx *ctx = xmalloc(sizeof(struct ident_wr_ctx));
+   ctx = xmalloc(sizeof(struct ident_wr_ctx));
    ctx->file       = f;
    ctx->start_off  = ftell(f);
    ctx->pend_alloc = 512;
@@ -192,11 +205,12 @@ ident_wr_ctx_t ident_write_begin(FILE *f)
 
 void ident_write_end(ident_wr_ctx_t ctx)
 {
+   size_t i;
    long table_off = ftell(ctx->file);
 
    write_u16(ctx->n_pending, ctx->file);
 
-   for (size_t i = 0; i < ctx->n_pending; i++) {
+   for (i = 0; i < ctx->n_pending; i++) {
       ident_t ident = ctx->pending[i];
       if (fwrite(istr(ident), ident->depth, 1, ctx->file) != 1)
          fatal("fwrite failed");
@@ -211,9 +225,10 @@ void ident_write_end(ident_wr_ctx_t ctx)
 
 void ident_write(ident_t ident, ident_wr_ctx_t ctx)
 {
+   uint16_t index;
+
    assert(ident != NULL);
 
-   uint16_t index;
    if (ident->write_gen == ctx->generation)
       index = ident->write_index;
    else {
@@ -237,17 +252,19 @@ void ident_write(ident_t ident, ident_wr_ctx_t ctx)
 
 ident_rd_ctx_t ident_read_begin(FILE *f)
 {
+   size_t i;
+   struct ident_rd_ctx *ctx;
    long ident_off = read_u32(f);
    long save_off = ftell(f);
 
    fseek(f, ident_off, SEEK_SET);
 
-   struct ident_rd_ctx *ctx = xmalloc(sizeof(struct ident_rd_ctx));
+   ctx = xmalloc(sizeof(struct ident_rd_ctx));
    ctx->file     = f;
    ctx->n_idents = read_u16(ctx->file);
    ctx->idents   = xmalloc(sizeof(ident_t) * ctx->n_idents);
 
-   for (size_t i = 0; i < ctx->n_idents; i++) {
+   for (i = 0; i < ctx->n_idents; i++) {
       struct trie *p = &root;
       char ch;
       while ((ch = fgetc(ctx->file)) != '\0') {
@@ -299,21 +316,21 @@ ident_t ident_uniq(const char *prefix)
 
 ident_t ident_prefix(ident_t a, ident_t b, char sep)
 {
+   struct trie *result;
+   const char sep_str[] = { sep, '\0' };
+   const char *p_sep_str = sep_str;
+   const char *bstr = istr(b);
+
    if (a == NULL)
       return b;
    else if (b == NULL)
       return a;
 
-   struct trie *result;
-
    // Append separator
-   const char sep_str[] = { sep, '\0' };
-   const char *p_sep_str = sep_str;
    if (!search_trie(&p_sep_str, a, &result))
       build_trie(p_sep_str, result, &result);
 
    // Append b
-   const char *bstr = istr(b);
    if (!search_trie(&bstr, result, &result))
       build_trie(bstr, result, &result);
 
@@ -345,9 +362,11 @@ char ident_char(ident_t i, unsigned n)
 
 ident_t ident_until(ident_t i, char c)
 {
+   ident_t r;
+
    assert(i != NULL);
 
-   ident_t r = i;
+   r = i;
    while (i->value != '\0') {
       if (i->value == c)
          r = i->up;
@@ -359,9 +378,11 @@ ident_t ident_until(ident_t i, char c)
 
 ident_t ident_runtil(ident_t i, char c)
 {
+   ident_t r;
+
    assert(i != NULL);
 
-   ident_t r = i;
+   r = i;
    while (i->value != '\0') {
       if (i->value == c)
          return i->up;
@@ -373,9 +394,9 @@ ident_t ident_runtil(ident_t i, char c)
 
 bool icmp(ident_t i, const char *s)
 {
+   struct trie *result;
    assert(i != NULL);
 
-   struct trie *result;
    if (!search_trie(&s, &root, &result))
       return false;
    else

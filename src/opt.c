@@ -42,12 +42,15 @@ struct collapse_ctx {
 
 static tree_t opt_collapse_find_fn(tree_t t, void *context)
 {
-   struct collapse_ctx *ctx = context;
+   struct collapse_ctx *ctx;
+   bool maybe_alias;
+
+   ctx = context;
 
    if (tree_kind(t) != T_PROCESS)
       return t;
 
-   const bool maybe_alias =
+   maybe_alias =
       (tree_stmts(t) == 2)
       && (tree_kind(tree_stmt(t, 0)) == T_SIGNAL_ASSIGN)
       && (tree_waveforms(tree_stmt(t, 0)) == 1)
@@ -75,12 +78,13 @@ static tree_t opt_collapse_find_fn(tree_t t, void *context)
             && (tree_ref(tree_trigger(wait, 0)) == rhs);
 
          if (is_wait_on) {
+            struct collapse_list *l;
             tree_t a = tree_new(T_ALIAS);
             tree_set_loc(a, tree_loc(t));
             tree_set_ident(a, tree_ident(lhs));
             tree_set_value(a, tree_value(wave));
 
-            struct collapse_list *l = xmalloc(sizeof(struct collapse_list));
+            l = xmalloc(sizeof(struct collapse_list));
             l->next = ctx->replace;
             l->old  = lhs;
             l->new  = tree_ref(tree_value(wave));

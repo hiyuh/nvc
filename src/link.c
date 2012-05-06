@@ -64,21 +64,27 @@ static bool link_needs_body(tree_t pack)
 
 static void link_context(context_t ctx)
 {
-   ident_t all = ident_strip(ctx.name, ident_new(".all"));
+   ident_t all;
+   lib_t lib;
+   tree_t unit;
+   ident_t body_i;
+   tree_t body;
+
+   all = ident_strip(ctx.name, ident_new(".all"));
    assert(all != NULL);
 
-   lib_t lib = lib_find(istr(ident_until(ctx.name, '.')), true, true);
+   lib = lib_find(istr(ident_until(ctx.name, '.')), true, true);
    if (lib == NULL)
       fatal("cannot link library %s", istr(all));
 
-   tree_t unit = lib_get(lib, all);
+   unit = lib_get(lib, all);
    if (unit == NULL)
       fatal("cannot find unit %s", istr(all));
    else if (tree_kind(unit) != T_PACKAGE)
       return;
 
-   ident_t body_i = ident_prefix(all, ident_new("body"), '-');
-   tree_t body = lib_get(lib, body_i);
+   body_i = ident_prefix(all, ident_new("body"), '-');
+   body = lib_get(lib, body_i);
    if (body == NULL) {
       if (link_needs_body(unit))
          fatal("missing body for package %s", istr(all));
@@ -104,17 +110,21 @@ static void link_args_begin(void)
 
 static void link_args_end(void)
 {
-   for (int i = 0; i < n_args; i++)
+   int i;
+   for (i = 0; i < n_args; i++)
       free(args[i]);
    free(args);
 }
 
 static void link_exec(void)
 {
-   for (int i = 0; i < n_args; i++)
+   int i;
+   pid_t pid;
+
+   for (i = 0; i < n_args; i++)
       printf("%s%c", args[i], (i + 1 == n_args ? '\n' : ' '));
 
-   pid_t pid = fork();
+   pid = fork();
    if (pid == 0) {
       execv(args[0], args);
       fatal_errno("execv");
@@ -172,6 +182,8 @@ static void link_native(tree_t top)
 
 void link_bc(tree_t top)
 {
+   unsigned i;
+
    link_args_begin();
 
    link_arg_f("%s/llvm-ld", LLVM_CONFIG_BINDIR);
@@ -184,7 +196,7 @@ void link_bc(tree_t top)
    link_output(top, "bc");
    link_arg_bc(lib_work(), tree_ident(top));
 
-   for (unsigned i = 0; i < tree_contexts(top); i++)
+   for (i = 0; i < tree_contexts(top); i++)
       link_context(tree_context(top, i));
 
    link_exec();
