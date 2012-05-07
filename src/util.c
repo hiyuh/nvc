@@ -305,12 +305,12 @@ void fmt_loc(FILE *f, const struct loc *loc)
    size_t i = 0;
    bool many_lines;
    int last_col;
-   int j;
+   uint16_t j;
 
    if ((loc == NULL) || (loc->first_line == LINE_INVALID))
       return;
 
-   fprintf(f, "\tFile %s, Line %d\n", loc->file, loc->first_line);
+   fprintf(f, "\tFile %s, Line %u\n", loc->file, loc->first_line);
 
    if (loc->linebuf == NULL)
       return;
