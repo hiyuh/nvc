@@ -241,6 +241,7 @@ static const char *cgen_mangle_func_name(tree_t decl)
    type_t type = tree_type(decl);
    unsigned i;
 
+   foreign = tree_attr_tree(decl, foreign_i);
    if (foreign != NULL) {
       assert(tree_kind(foreign) == T_AGGREGATE);
 
