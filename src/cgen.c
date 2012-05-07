@@ -372,7 +372,7 @@ static LLVMValueRef cgen_array_right(type_t type, LLVMValueRef var)
 static LLVMValueRef cgen_array_len(type_t type, LLVMValueRef data)
 {
    if (cgen_const_bounds(type)) {
-      int n_elems = 1;
+      int32_t n_elems = 1;
       unsigned i;
       for (i = 0; i < type_dims(type); i++) {
          int64_t low, high;
