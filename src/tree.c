@@ -2071,8 +2071,8 @@ static tree_t tree_rewrite_aux(tree_t t, struct rewrite_ctx *ctx);
 
 static void rewrite_a(struct tree_array *a, struct rewrite_ctx *ctx)
 {
-   unsigned i;
-   unsigned n;
+   size_t i;
+   size_t n;
 
    for (i = 0; i < a->count; i++)
       a->items[i] = tree_rewrite_aux(a->items[i], ctx);
