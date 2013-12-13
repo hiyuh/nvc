@@ -127,13 +127,13 @@ static void link_context_bc_fn(lib_t lib, tree_t unit, FILE *deps)
    }
 }
 
-#ifdef __CYGWIN__
+#if defined(__CYGWIN__) && defined(ENABLE_NATIVE)
 static void link_context_cyg_fn(lib_t lib, tree_t unit, FILE *deps)
 {
    if (link_find_native_library(lib, unit, deps))
       link_product(lib, tree_ident(unit), "", "a");
 }
-#endif  // __CYGWIN__
+#endif  // defined(__CYGWIN__) && defined(ENABLE_NATIVE)
 
 static void link_context(tree_t ctx, FILE *deps, context_fn_t fn)
 {
