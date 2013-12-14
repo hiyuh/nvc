@@ -1,4 +1,5 @@
 ieeedir = $(pkgdatadir)/ieee
+std = ../std/std
 ieee_DATA = ieee/_NVC_LIB \
 	ieee/IEEE.STD_LOGIC_1164 ieee/IEEE.NUMERIC_BIT \
 	ieee/IEEE.NUMERIC_STD ieee/_IEEE.NUMERIC_STD.bc \
@@ -13,17 +14,36 @@ ieee_DATA = ieee/_NVC_LIB \
 	ieee/IEEE.VITAL_PRIMITIVES-body ieee/_IEEE.VITAL_PRIMITIVES-body.bc \
 	ieee/IEEE.VITAL_MEMORY
 
-# Using SCRIPTS rather than data ensures execute bit gets set on Cygwin
-ieee_SCRIPTS =
+ieee/_IEEE.NUMERIC_STD.bc: ieee/IEEE.NUMERIC_STD
+ieee/_IEEE.STD_LOGIC_1164-body.bc: ieee/IEEE.STD_LOGIC_1164-body
+ieee/_IEEE.NUMERIC_STD-body.bc: ieee/IEEE.NUMERIC_STD-body
+ieee/_IEEE.NUMERIC_BIT-body.bc: ieee/IEEE.NUMERIC_BIT-body
+ieee/_IEEE.MATH_REAL.bc: ieee/IEEE.MATH_REAL
+ieee/_IEEE.MATH_REAL-body.bc: ieee/IEEE.MATH_REAL-body
+ieee/_IEEE.VITAL_TIMING.bc: ieee/IEEE.VITAL_TIMING
+ieee/_IEEE.VITAL_TIMING-body.bc: ieee/IEEE.VITAL_TIMING-body
+ieee/_IEEE.VITAL_PRIMITIVES.bc: ieee/IEEE.VITAL_PRIMITIVES
+ieee/_IEEE.VITAL_PRIMITIVES-body.bc: ieee/IEEE.VITAL_PRIMITIVES-body
 
 if ENABLE_NATIVE
-ieee_SCRIPTS += \
+ieee_so = \
 	ieee/_IEEE.NUMERIC_STD.so \
 	ieee/_IEEE.STD_LOGIC_1164-body.so ieee/_IEEE.NUMERIC_STD-body.so \
 	ieee/_IEEE.NUMERIC_BIT-body.so ieee/_IEEE.MATH_REAL.so \
 	ieee/_IEEE.MATH_REAL-body.so ieee/_IEEE.VITAL_TIMING.so \
 	ieee/_IEEE.VITAL_TIMING-body.so ieee/_IEEE.VITAL_PRIMITIVES.so \
 	ieee/_IEEE.VITAL_PRIMITIVES-body.so
+
+ieee/_IEEE.NUMERIC_STD.so: ieee/IEEE.NUMERIC_STD
+ieee/_IEEE.STD_LOGIC_1164-body.so: ieee/IEEE.STD_LOGIC_1164-body
+ieee/_IEEE.NUMERIC_STD-body.so: ieee/IEEE.NUMERIC_STD-body
+ieee/_IEEE.NUMERIC_BIT-body.so: ieee/IEEE.NUMERIC_BIT-body
+ieee/_IEEE.MATH_REAL.so: ieee/IEEE.MATH_REAL
+ieee/_IEEE.MATH_REAL-body.so: ieee/IEEE.MATH_REAL-body
+ieee/_IEEE.VITAL_TIMING.so: ieee/IEEE.VITAL_TIMING
+ieee/_IEEE.VITAL_TIMING-body.so: ieee/IEEE.VITAL_TIMING-body
+ieee/_IEEE.VITAL_PRIMITIVES.so: ieee/IEEE.VITAL_PRIMITIVES
+ieee/_IEEE.VITAL_PRIMITIVES-body.so: ieee/IEEE.VITAL_PRIMITIVES-body
 
 if IMPLIB_REQUIRED
 ieee_DATA += \
@@ -33,15 +53,34 @@ ieee_DATA += \
 	ieee/_IEEE.MATH_REAL-body.a ieee/_IEEE.VITAL_TIMING.a \
 	ieee/_IEEE.VITAL_TIMING-body.a ieee/_IEEE.VITAL_PRIMITIVES.a \
 	ieee/_IEEE.VITAL_PRIMITIVES-body.a
+
+ieee/_IEEE.NUMERIC_STD.a: ieee/IEEE.NUMERIC_STD
+ieee/_IEEE.STD_LOGIC_1164-body.a: ieee/IEEE.STD_LOGIC_1164-body
+ieee/_IEEE.NUMERIC_STD-body.a: ieee/IEEE.NUMERIC_STD-body
+ieee/_IEEE.NUMERIC_BIT-body.a: ieee/IEEE.NUMERIC_BIT-body
+ieee/_IEEE.MATH_REAL.a: ieee/IEEE.MATH_REAL
+ieee/_IEEE.MATH_REAL-body.a: ieee/IEEE.MATH_REAL-body
+ieee/_IEEE.VITAL_TIMING.a: ieee/IEEE.VITAL_TIMING
+ieee/_IEEE.VITAL_TIMING-body.a: ieee/IEEE.VITAL_TIMING-body
+ieee/_IEEE.VITAL_PRIMITIVES.a: ieee/IEEE.VITAL_PRIMITIVES
+ieee/_IEEE.VITAL_PRIMITIVES-body.a: ieee/IEEE.VITAL_PRIMITIVES-body
+
+# Using SCRIPTS rather than data ensures execute bit gets set on Cygwin
+ieee_SCRIPTS = $(ieee_so)
+else
+
+ieee_DATA += $(ieee_so)
+
 endif
 
 endif
 
 bootstrap: $(ieee_DATA)
 
-ieee/_NVC_LIB:
+ieee/_NVC_LIB: ieee/IEEE.STD_LOGIC_1164
 
-ieee/IEEE.STD_LOGIC_1164: $(srcdir)/std_logic_1164.vhdl
+ieee/IEEE.STD_LOGIC_1164: $(srcdir)/std_logic_1164.vhdl \
+	$(std)/STD.STANDARD
 	$(nvc) -L ../std --work=ieee -a $<
 
 ieee/IEEE.STD_LOGIC_1164-body: $(srcdir)/std_logic_1164-body.vhdl \
@@ -63,21 +102,22 @@ ieee/IEEE.NUMERIC_BIT-body: $(srcdir)/numeric_bit-body.vhdl ieee/IEEE.NUMERIC_BI
 	$(nvc) -L ../std --work=ieee -a $<
 	$(codegen) -L ../std --work=ieee --codegen numeric_bit
 
-ieee/IEEE.MATH_REAL: $(srcdir)/math_real.vhdl
+ieee/IEEE.MATH_REAL: $(srcdir)/math_real.vhdl $(std)/STD.STANDARD
 	$(nvc) -L ../std --work=ieee -a $<
 
 ieee/IEEE.MATH_REAL-body: $(srcdir)/math_real-body.vhdl ieee/IEEE.MATH_REAL
 	$(nvc) -L ../std --work=ieee -a $<
 	$(codegen) -L ../std --work=ieee --codegen math_real
 
-ieee/IEEE.VITAL_TIMING: $(srcdir)/timing_p.vhdl
+ieee/IEEE.VITAL_TIMING: $(srcdir)/timing_p.vhdl ieee/IEEE.STD_LOGIC_1164
 	$(nvc) -L ../std --work=ieee -a $<
 
 ieee/IEEE.VITAL_TIMING-body: $(srcdir)/timing_b.vhdl ieee/IEEE.VITAL_TIMING
 	$(nvc) -L ../std --work=ieee -a $<
 	$(codegen) -L ../std --work=ieee --codegen vital_timing
 
-ieee/IEEE.VITAL_PRIMITIVES: $(srcdir)/prmtvs_p.vhdl
+ieee/IEEE.VITAL_PRIMITIVES: $(srcdir)/prmtvs_p.vhdl ieee/IEEE.STD_LOGIC_1164 \
+	ieee/IEEE.VITAL_TIMING
 	$(nvc) -L ../std --work=ieee -a $<
 
 ieee/IEEE.VITAL_PRIMITIVES-body: $(srcdir)/prmtvs_b.vhdl \
@@ -85,7 +125,8 @@ ieee/IEEE.VITAL_PRIMITIVES-body: $(srcdir)/prmtvs_b.vhdl \
 	$(nvc) -L ../std --work=ieee -a $<
 	$(codegen) -L ../std --work=ieee --codegen vital_primitives
 
-ieee/IEEE.VITAL_MEMORY: $(srcdir)/memory_p.vhdl
+ieee/IEEE.VITAL_MEMORY: $(srcdir)/memory_p.vhdl ieee/IEEE.STD_LOGIC_1164 \
+	ieee/IEEE.VITAL_PRIMITIVES
 	$(nvc) -L ../std --work=ieee -a $<
 
 ieee/IEEE.VITAL_MEMORY-body: $(srcdir)/memory_b.vhdl ieee/IEEE.VITAL_MEMORY
