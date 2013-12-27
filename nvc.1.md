@@ -125,6 +125,28 @@ specific options must be placed after the command.
    for the waveform format. The waveform format can be specified with the
    `--format` option.
 
+## ENVIRONMENT VARIABLES
+
+ * `NVC_CYG_LIB`:
+
+ * `NVC_DECODE`:
+
+ * `NVC_EVAL_DEBUG`:
+
+ * `NVC_GC_VERBOSE`:
+
+ * `NVC_GDB`:
+
+ * `NVC_LIBPATH`:
+
+ * `NVC_LINK_QUIET`:
+
+ * `NVC_LLC_ARG`:
+
+ * `NVC_NO_COLOR`:
+
+ * `NVC_TREE_SIZES`:
+
 ## LIBRARIES
 
 Description of library search path, contents, etc.
