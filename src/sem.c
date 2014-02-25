@@ -618,9 +618,15 @@ static void sem_declare_predefined_ops(tree_t decl)
 
       // Multiplication
       sem_declare_binary(mult, t, t, t, "mul");
+      if (kind == T_REAL) { // Guard fall-through path from T_INTEGR.
+         sem_declare_binary(mult, std_real, std_int, std_real, "mul");
+         sem_declare_binary(mult, std_int, std_real, std_real, "mul");
+      }
 
       // Division
       sem_declare_binary(div, t, t, t, "div");
+      if (kind == T_REAL) // Guard fall-through path from T_INTEGR.
+         sem_declare_binary(div, std_real, std_int, std_real, "div");
 
       // Sign operators
       sem_declare_unary(plus, t, t, "identity");
