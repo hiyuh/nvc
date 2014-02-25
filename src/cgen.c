@@ -2377,11 +2377,22 @@ static LLVMValueRef cgen_fcall(tree_t t, cgen_ctx_t *ctx)
    // Regular builtin functions
    if (builtin) {
       assert(nparams > 0);
-      const bool real = cgen_is_real(arg_types[0]);
+      const bool real0 = cgen_is_real(arg_types[0]);
+      const bool real1 = (nparams > 1) && cgen_is_real(arg_types[1]);
 
       if (icmp(builtin, "mul")) {
-         if (real)
+         if (real0 && real1)
             return LLVMBuildFMul(builder, args[0], args[1], "");
+         else if (real0 && !real1) {
+            LLVMValueRef i =
+               LLVMBuildSIToFP(builder, args[1], LLVMDoubleType(), "");
+            return LLVMBuildFMul(builder, args[0], i, "");
+         }
+         else if (!real0 && real1) {
+            LLVMValueRef i =
+               LLVMBuildSIToFP(builder, args[0], LLVMDoubleType(), "");
+            return LLVMBuildFMul(builder, i, args[1], "");
+         }
          else {
             cgen_widen(rtype, args, nparams);
             LLVMValueRef r = LLVMBuildMul(builder, args[0], args[1], "");
@@ -2401,7 +2412,7 @@ static LLVMValueRef cgen_fcall(tree_t t, cgen_ctx_t *ctx)
          return LLVMBuildFPToSI(builder, r, llvm_type(rtype), "");
       }
       else if (icmp(builtin, "add")) {
-         if (real)
+         if (real0 && real1)
             return LLVMBuildFAdd(builder, args[0], args[1], "");
          else {
             cgen_widen(rtype, args, nparams);
@@ -2410,7 +2421,7 @@ static LLVMValueRef cgen_fcall(tree_t t, cgen_ctx_t *ctx)
          }
       }
       else if (icmp(builtin, "sub")) {
-         if (real)
+         if (real0 && real1)
             return LLVMBuildFSub(builder, args[0], args[1], "");
          else {
             cgen_widen(rtype, args, nparams);
@@ -2419,8 +2430,13 @@ static LLVMValueRef cgen_fcall(tree_t t, cgen_ctx_t *ctx)
          }
       }
       else if (icmp(builtin, "div")) {
-         if (real)
+         if (real0 && real1)
             return LLVMBuildFDiv(builder, args[0], args[1], "");
+         else if (real0 && !real1) {
+            LLVMValueRef i =
+               LLVMBuildSIToFP(builder, args[1], LLVMDoubleType(), "");
+            return LLVMBuildFDiv(builder, args[0], i, "");
+         }
          else {
             cgen_widen(rtype, args, nparams);
             LLVMValueRef r = cgen_division(args[0], args[1],
@@ -2435,55 +2451,55 @@ static LLVMValueRef cgen_fcall(tree_t t, cgen_ctx_t *ctx)
          return LLVMBuildFPToSI(builder, r, llvm_type(rtype), "");
       }
       else if (icmp(builtin, "eq")) {
-         if (!real)
+         if (!real0 && !real1)
             cgen_widen(rtype, args, nparams);
-         LLVMValueRef r = real
+         LLVMValueRef r = (real0 && real1)
             ? LLVMBuildFCmp(builder, LLVMRealUEQ, args[0], args[1], "")
             : LLVMBuildICmp(builder, LLVMIntEQ, args[0], args[1], "");
          return cgen_logical(t, r);
       }
       else if (icmp(builtin, "neq")) {
-         if (!real)
+         if (!real0 && !real1)
             cgen_widen(rtype, args, nparams);
-         LLVMValueRef r = real
+         LLVMValueRef r = (real0 && real1)
             ? LLVMBuildFCmp(builder, LLVMRealUNE, args[0], args[1], "")
             : LLVMBuildICmp(builder, LLVMIntNE, args[0], args[1], "");
          return cgen_logical(t, r);
       }
       else if (icmp(builtin, "lt")) {
-         if (!real)
+         if (!real0 && !real1)
             cgen_widen(rtype, args, nparams);
-         LLVMValueRef r = real
+         LLVMValueRef r = (real0 && real1)
             ? LLVMBuildFCmp(builder, LLVMRealULT, args[0], args[1], "")
             : LLVMBuildICmp(builder, LLVMIntSLT, args[0], args[1], "");
          return cgen_logical(t, r);
       }
       else if (icmp(builtin, "gt")) {
-         if (!real)
+         if (!real0 && !real1)
             cgen_widen(rtype, args, nparams);
-         LLVMValueRef r = real
+         LLVMValueRef r = (real0 && real1)
             ? LLVMBuildFCmp(builder, LLVMRealUGT, args[0], args[1], "")
             : LLVMBuildICmp(builder, LLVMIntSGT, args[0], args[1], "");
          return cgen_logical(t, r);
       }
       else if (icmp(builtin, "leq")) {
-         if (!real)
+         if (!real0 && !real1)
             cgen_widen(rtype, args, nparams);
-         LLVMValueRef r = real
+         LLVMValueRef r = (real0 && real1)
             ? LLVMBuildFCmp(builder, LLVMRealULE, args[0], args[1], "")
             : LLVMBuildICmp(builder, LLVMIntSLE, args[0], args[1], "");
          return cgen_logical(t, r);
       }
       else if (icmp(builtin, "geq")) {
-         if (!real)
+         if (!real0 && !real1)
             cgen_widen(rtype, args, nparams);
-         LLVMValueRef r = real
+         LLVMValueRef r = (real0 && real1)
             ? LLVMBuildFCmp(builder, LLVMRealUGE, args[0], args[1], "")
             : LLVMBuildICmp(builder, LLVMIntSGE, args[0], args[1], "");
          return cgen_logical(t, r);
       }
       else if (icmp(builtin, "neg")) {
-         if (real)
+         if (real0)
             return LLVMBuildFNeg(builder, args[0], "neg");
          else
             return LLVMBuildNeg(builder, args[0], "neg");
@@ -2519,7 +2535,7 @@ static LLVMValueRef cgen_fcall(tree_t t, cgen_ctx_t *ctx)
       else if (icmp(builtin, "rem"))
          return LLVMBuildSRem(builder, args[0], args[1], "");
       else if (icmp(builtin, "exp")) {
-         if (real) {
+         if (real0) {
             LLVMValueRef cast[] = {
                args[0],
                LLVMBuildSIToFP(builder, args[1], LLVMDoubleType(), ""),
@@ -2539,12 +2555,12 @@ static LLVMValueRef cgen_fcall(tree_t t, cgen_ctx_t *ctx)
          }
       }
       else if (icmp(builtin, "abs")) {
-         LLVMValueRef cmp = real
+         LLVMValueRef cmp = real0
             ? LLVMBuildFCmp(builder, LLVMRealULT, args[0], llvm_real(0.0), "")
             : LLVMBuildICmp(builder, LLVMIntSLT, args[0], llvm_int32(0), "");
          return LLVMBuildSelect(
             builder, cmp,
-            (real ? LLVMBuildFNeg : LLVMBuildNeg)(builder, args[0], ""),
+            (real0 ? LLVMBuildFNeg : LLVMBuildNeg)(builder, args[0], ""),
             args[0], "abs");
       }
       else if (icmp(builtin, "aeq"))
@@ -2585,7 +2601,7 @@ static LLVMValueRef cgen_fcall(tree_t t, cgen_ctx_t *ctx)
          ctx->tmp_stack_used = true;
          const bool is_signed =
             (type_kind(type_base_recur(arg_types[0])) == T_INTEGER);
-         LLVMOpcode op = real ? LLVMBitCast : (is_signed ? LLVMSExt : LLVMZExt);
+         LLVMOpcode op = real0 ? LLVMBitCast : (is_signed ? LLVMSExt : LLVMZExt);
          LLVMValueRef res = LLVMBuildAlloca(builder,
                                             llvm_uarray_type(LLVMInt8Type(), 1),
                                             "image");
